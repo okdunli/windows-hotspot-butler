@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{{title}}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    color:#1f2937;background:#eef1f6;
+  }
+  .card{
+    width:100%;max-width:560px;background:#fff;border-radius:8px;
+    border:1px solid #dfe5ee;box-shadow:0 10px 34px rgba(20,40,80,.10);
+  }
+  .bar{height:5px;background:linear-gradient(90deg,#1e40af,#2563eb,#38bdf8)}
+  .head{padding:26px 34px 18px;border-bottom:1px solid #edf1f7}
+  .head .brand{font-size:12px;font-weight:700;letter-spacing:.16em;color:#2563eb;text-transform:uppercase}
+  .head h1{font-size:21px;margin-top:10px;font-weight:650;color:#0f172a}
+  .head p{margin-top:7px;font-size:13.5px;color:#64748b;line-height:1.7}
+  .body{padding:22px 34px 28px}
+  table{width:100%;border-collapse:collapse;margin-bottom:22px;font-size:13.5px}
+  td{padding:9px 0;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  td:first-child{width:88px;color:#64748b}
+  td:last-child{color:#0f172a;font-weight:500}
+  .notice{
+    background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;
+    font-size:13px;line-height:1.85;color:#475569;white-space:pre-line;margin-bottom:24px;
+  }
+  button{
+    width:100%;padding:14px;border:0;border-radius:6px;cursor:pointer;
+    font-size:15px;font-weight:600;color:#fff;background:#1d4ed8;transition:background .15s ease;
+  }
+  button:hover{background:#1e40af}
+  .foot{
+    padding:14px 34px;border-top:1px solid #edf1f7;font-size:11.5px;color:#94a3b8;
+    display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  }
+  @media(max-width:440px){.head,.body,.foot{padding-left:20px;padding-right:20px}}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="bar"></div>
+    <div class="head">
+      <div class="brand">{{ssid}}</div>
+      <h1>{{title}}</h1>
+      <p>{{subtitle}}</p>
+    </div>
+    <div class="body">
+      <table>
+        <tr><td>网络名称</td><td>{{ssid}}</td></tr>
+        <tr><td>网关地址</td><td>{{gateway}}</td></tr>
+        <tr><td>在线设备</td><td>{{clients}} 台</td></tr>
+        <tr><td>接入时间</td><td>{{time}}</td></tr>
+      </table>
+      <div class="notice">{{notice}}</div>
+      <form method="post" action="/accept">
+        <button type="submit">{{button}}</button>
+      </form>
+    </div>
+    <div class="foot"><span>{{footer}}</span><span>Powered by WiFi 热点管理器</span></div>
+  </div>
+</body>
+</html>
