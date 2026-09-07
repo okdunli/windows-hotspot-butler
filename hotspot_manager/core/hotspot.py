@@ -1,4 +1,12 @@
-"""热点控制：Windows 10/11 移动热点(WinRT) + 承载网络(netsh) 双后端。"""
+"""热点控制：Windows 10/11 移动热点(WinRT) + 承载网络(netsh) 双后端。
+
+开热点有三条互不相同的路，能力由 wificaps 静态探测：
+  * 软 AP(Soft AP) 模式        → WinRT 后端（旧式能力标志）
+  * Wi-Fi Direct               → WinRT 后端（Win10/11 真正底层，很多「软 AP 不支持」
+                                  的 USB 网卡其实支持它，照样能开）
+  * 承载网络(hostednetwork)    → netsh 后端（猎豹/360 同款方案）
+netsh 后端只建 AP，需再用 ics 模块启用 ICS 共享上网连接，设备才能实际上网。
+"""
 from __future__ import annotations
 
 import logging
@@ -8,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from . import netinfo, pshell, wificaps
+from . import netinfo, pshell, wificaps, ics
 from .config import HotspotConfig
 from .paths import TETHERING_PS1
 from .storage import normalize_mac
@@ -331,12 +339,30 @@ class HotspotController:
             elif want == "netsh":
                 self._backend = self.netsh if self.netsh.available() else None
             else:
-                if self.winrt.available():
-                    self._backend = self.winrt
-                elif self.netsh.available():
-                    self._backend = self.netsh
-                else:
+                # auto：优先用静态能力结论选对后端，避免 winrt.available()
+                # 只查 API 是否存在（不查硬件）而误选导致 8188GU 类网卡 start 才失败。
+                caps = self.detect_capabilities()
+                sa = caps.soft_ap_supported
+                wfd = caps.wifi_direct_supported
+                hosted = caps.hosted_supported
+                if sa is True or wfd is True:
+                    # 软 AP 或 Wi-Fi Direct 支持 → 移动热点(WinRT) 最完整
+                    self._backend = self.winrt if self.winrt.available() else (
+                        self.netsh if self.netsh.available() else None)
+                elif sa is False and wfd is False and hosted:
+                    # 软 AP/Wi-Fi Direct 都不支持但承载网络支持 → 直接走 netsh
+                    self._backend = self.netsh if self.netsh.available() else None
+                elif sa is False and wfd is False and not hosted:
+                    # 三条路都确认不行 → 无可用后端
                     self._backend = None
+                else:
+                    # 静态结论未知 → 回退到 available() 探测
+                    if self.winrt.available():
+                        self._backend = self.winrt
+                    elif self.netsh.available():
+                        self._backend = self.netsh
+                    else:
+                        self._backend = None
             return self._backend
 
     @property
@@ -355,9 +381,11 @@ class HotspotController:
         bname = getattr(be, "name", "none") if be else "none"
         winrt = bname == "winrt"
         caps = self.detect_capabilities(refresh=refresh)
+        hc = caps.host_hotspot_capability()
         return {
             "backend": bname,
             "backend_label": self.backend_label,
+            "recommended_backend": hc.get("backend", ""),
             "ssid": be is not None,
             "passphrase": be is not None,
             "band": winrt,
@@ -367,9 +395,10 @@ class HotspotController:
             "band_5_text": caps.band_5_text,
             "hosted_supported": caps.hosted_supported,
             "soft_ap_supported": caps.soft_ap_supported,
-            "can_host_hotspot": caps.host_hotspot_capability()["can_host"],
-            "host_block_reason": caps.host_hotspot_capability().get("reason", ""),
-            "host_block_detail": caps.host_hotspot_capability().get("detail", ""),
+            "wifi_direct_supported": caps.wifi_direct_supported,
+            "can_host_hotspot": hc["can_host"],
+            "host_block_reason": hc.get("reason", ""),
+            "host_block_detail": hc.get("detail", ""),
             "wpa3": caps.wpa3_supported,
             "wpa2": caps.wpa2_supported,
             "max_clients_writable": False,          # Windows 未开放写入 API
@@ -450,6 +479,20 @@ class HotspotController:
         ok, msg = be.start()                      # type: ignore[union-attr]
         if not ok:
             msg = self._enrich_start_error(msg)
+            return ok, msg
+        # netsh 后端只建 AP、不共享上网，必须显式开 ICS 设备才能上网
+        if getattr(be, "name", "") == "netsh":
+            try:
+                ok_ics, m_ics = ics.enable()
+                if ok_ics:
+                    msg += "；已开启互联网连接共享(ICS)，设备可正常上网。"
+                else:
+                    msg += (f"；但互联网连接共享未开启（{m_ics}），"
+                            f"设备可能连上却无法上网，请确认以管理员身份运行。")
+                    log.warning("ICS 启用失败：%s", m_ics)
+            except Exception as exc:
+                log.exception("ICS 启用异常")
+                msg += "；互联网连接共享启用时发生异常，设备可能无法上网。"
         return ok, msg
 
     def _enrich_start_error(self, msg: str) -> str:
@@ -467,7 +510,21 @@ class HotspotController:
         be = self.backend
         if be is None:
             return False, "没有可用的热点后端"
-        return be.stop()                          # type: ignore[union-attr]
+        name = getattr(be, "name", "")
+        priv = None
+        if name == "netsh":
+            # 关闭前先拿到热点网卡名，关闭后该虚拟网卡可能被卸载
+            try:
+                priv = netinfo.find_hotspot_adapter()
+            except Exception:
+                priv = None
+        ok, msg = be.stop()                       # type: ignore[union-attr]
+        if ok and name == "netsh":
+            try:
+                ics.disable(private_name=priv.name if priv else None)
+            except Exception:
+                log.exception("ICS 关闭异常")
+        return ok, msg
 
     def toggle(self) -> Tuple[bool, str]:
         return self.stop() if self.last_status.active else self.start()
@@ -486,6 +543,10 @@ class HotspotController:
             lines.append(
                 f"加密能力：WPA2 {'√' if caps.wpa2_supported else '×'}，"
                 f"WPA3 {'√' if caps.wpa3_supported else '×'}"
+            )
+            wfd = caps.wifi_direct_supported
+            lines.append(
+                f"Wi-Fi Direct：{'支持' if wfd is True else ('不支持' if wfd is False else '未知')}"
             )
         lines.extend(caps.notes)
         lines.append(f"管理员权限：{'是' if pshell.is_admin() else '否（部分操作会失败）'}")

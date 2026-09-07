@@ -131,7 +131,16 @@ class TrafficMonitor:
 
     def _try_start_sniffer(self) -> Tuple[bool, str]:
         try:
-            from scapy.all import conf, sniff  # type: ignore
+            # 只 import 真正用到的符号，避免 `scapy.all` 把整个 TLS 层拉进来，
+            # 否则会触发 cryptography 的 CryptographyDeprecationWarning(FFDH) 噪音；
+            # 同时压低 scapy 在缺少 Npcap 时打印的「No libpcap provider」加载提示
+            # （该情况已有优雅回退，不必以警告形式吓到用户）。
+            import logging as _logging
+            # scapy 在未装 Npcap 时通过 scapy.loading 打印「No libpcap provider」
+            # 加载提示；该情况已有优雅回退，压低到 ERROR 避免吓到用户。
+            _logging.getLogger("scapy.loading").setLevel(_logging.ERROR)
+            from scapy.config import conf  # type: ignore
+            from scapy.sendrecv import sniff  # type: ignore
             from scapy.layers.l2 import Ether  # type: ignore
         except Exception as exc:  # ImportError / 运行时缺 Npcap
             return False, f"未安装 scapy（{type(exc).__name__}）"

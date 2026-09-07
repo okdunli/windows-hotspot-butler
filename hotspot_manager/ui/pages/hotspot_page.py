@@ -307,13 +307,29 @@ class HotspotPage(Page):
                 foreground=self.p.warning)
 
         # --- 后端 ---
-        self.be_hint.configure(
-            text=("承载网络(hostednetwork)："
-                  + ("可用" if caps.get("hosted_supported") else "本机网卡驱动不支持，已禁用")
-                  + "；移动热点(WinRT)："
-                  + ("可用" if caps.get("backend") == "winrt" else "未启用")
-                  + "。推荐「自动选择」。"),
-            foreground=self.p.warning if not caps.get("hosted_supported") else self.p.dim)
+        rec = caps.get("recommended_backend") or ""
+        if not caps.get("hosted_supported") and caps.get("soft_ap_supported") is not True:
+            self.be_hint.configure(
+                text="本机网卡既不支持软 AP、也不支持承载网络，目前没有可用后端——"
+                     "需更换支持热点的无线网卡，或安装带虚拟 AP 驱动的共享软件。",
+                foreground=self.p.danger)
+        elif rec == "netsh":
+            self.be_hint.configure(
+                text="本机不支持软 AP（移动热点 WinRT 用不了），但支持承载网络(hostednetwork)，"
+                     "这正是猎豹/360 WiFi 用的方案。请把上方「控制后端」设为"
+                     "「承载网络(netsh)」或「自动选择」，即可正常开热点。",
+                foreground=self.p.warning)
+        else:
+            winrt_ok = (caps.get("soft_ap_supported") is True
+                        or caps.get("wifi_direct_supported") is True)
+            self.be_hint.configure(
+                text=("承载网络(hostednetwork)："
+                      + ("可用" if caps.get("hosted_supported") else "本机网卡驱动不支持")
+                      + "；移动热点(WinRT)："
+                      + ("可用（Wi-Fi Direct / 软 AP）" if winrt_ok
+                         else "本机网卡不支持软 AP / Wi-Fi Direct")
+                      + "。推荐「自动选择」。"),
+                foreground=self.p.warning if not (caps.get("hosted_supported") or winrt_ok) else self.p.dim)
 
         # --- 最大连接数 ---
         sysmax = caps.get("max_clients_system")

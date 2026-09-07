@@ -31,6 +31,7 @@ PKG_DIR: Path = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR: Path = PKG_DIR / "portal_templates"
 SCRIPT_DIR: Path = PKG_DIR / "scripts"
 TETHERING_PS1: Path = SCRIPT_DIR / "tethering.ps1"
+ICS_PS1: Path = SCRIPT_DIR / "ics.ps1"
 
 _ALL_DIRS = (DATA_DIR, LOG_DIR, CUSTOM_ICON_DIR, CUSTOM_PORTAL_DIR)
 
