@@ -15,7 +15,6 @@
 
   const api = () => window.pywebview.api;
 
-  /* ------------------------------ 工具 ------------------------------ */
   function setText(el, v) {
     v = v == null ? "" : String(v);
     if (el && el.textContent !== v) el.textContent = v;
@@ -56,7 +55,39 @@
     }, 3200);
   }
 
-  /* ------------------------------ 渲染 ------------------------------ */
+  const THEME_KEY = "whm-theme";
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    const btn = $("#btnTheme");
+    if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
+  }
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* 忽略 */ }
+    applyTheme(saved === "light" ? "light" : "dark");
+  }
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    const next = cur === "light" ? "dark" : "light";
+    const root = document.documentElement;
+    root.classList.add("theme-anim");           // 平滑过渡
+    applyTheme(next);
+    setTimeout(() => root.classList.remove("theme-anim"), 420);
+  }
+
+  /* 数值变化时的闪动反馈 */
+  function setTextFlash(el, v, flashClass) {
+    const s = v == null ? "" : String(v);
+    if (!el || el.textContent === s) return;
+    el.textContent = s;
+    if (flashClass) {
+      el.classList.remove(flashClass);
+      void el.offsetWidth;                       // 强制 reflow 重启动画
+      el.classList.add(flashClass);
+    }
+  }
+
   function render(st) {
     state = st;
     busy = !!st.busy;
@@ -86,9 +117,9 @@
 
     // --- 统计 ---
     const s = st.stats || {};
-    setText($("#statOnline"), s.online || 0);
-    setText($("#statDown"), s.down_text || "0 B/s");
-    setText($("#statUp"), s.up_text || "0 B/s");
+    setTextFlash($("#statOnline"), s.online || 0, "flash");
+    setTextFlash($("#statDown"), s.down_text || "0 B/s", "flash");
+    setTextFlash($("#statUp"), s.up_text || "0 B/s", "flash");
 
     // --- 管理员 ---
     const badge = $("#adminBadge");
@@ -114,7 +145,14 @@
 
     // --- 设备 ---
     renderDevices(st.devices || []);
-    setText($("#devCount"), (st.devices || []).filter((d) => d.online).length);
+    const cnt = $("#devCount");
+    const n = (st.devices || []).filter((d) => d.online).length;
+    if (cnt.textContent !== String(n)) {
+      cnt.textContent = n;
+      cnt.classList.remove("bump");
+      void cnt.offsetWidth;
+      cnt.classList.add("bump");
+    }
 
     // --- toast（后端产生）---
     (st.toasts || []).forEach((t) => toast(t.text, t.kind));
@@ -197,7 +235,6 @@
     empty.classList.toggle("hidden", devices.length > 0);
   }
 
-  /* ------------------------------ 菜单 ------------------------------ */
   function openMenu(mac, anchor) {
     const menu = $("#devMenu");
     const dev = (state && state.devices || []).find((d) => d.mac === mac);
@@ -233,7 +270,6 @@
 
   function closeMenu() { $("#devMenu").classList.add("hidden"); menuMac = null; }
 
-  /* ------------------------------ 弹窗 ------------------------------ */
   function openModal(id) { $("#" + id).classList.remove("hidden"); }
   function closeModal(id) { $("#" + id).classList.add("hidden"); }
 
@@ -277,11 +313,13 @@
     setText($("#pfStatus"), txt);
   }
 
-  /* ------------------------------ 事件 ------------------------------ */
   function bind() {
     // 窗口
     $("#btnMin").addEventListener("click", () => api().minimize());
     $("#btnClose").addEventListener("click", () => api().close());
+
+    // 主题
+    $("#btnTheme").addEventListener("click", toggleTheme);
 
     // 圆盘
     $("#dial").addEventListener("click", (ev) => {
@@ -407,7 +445,6 @@
     });
   }
 
-  /* ------------------------------ 轮询 ------------------------------ */
   async function tick() {
     try {
       const st = await api().get_state();
@@ -419,6 +456,7 @@
   }
 
   function boot() {
+    initTheme();
     bind();
     tick();
   }

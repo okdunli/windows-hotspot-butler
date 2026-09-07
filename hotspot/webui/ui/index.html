@@ -8,10 +8,13 @@
 </head>
 <body>
 
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
 <header class="titlebar pywebview-drag-region">
   <div class="brand"><span class="logo">📡</span><span>WiFi 热点管理器</span></div>
   <div class="tb-right">
     <span id="adminBadge" class="badge">—</span>
+    <button id="btnTheme" class="icon-btn" title="切换浅色/深色">🌙</button>
     <button id="btnPortal" class="icon-btn" title="强制门户">🌐</button>
     <button id="btnSettings" class="icon-btn" title="设置">⚙️</button>
     <button id="btnMin" class="icon-btn" title="最小化">─</button>
@@ -109,7 +112,6 @@
   </section>
 </main>
 
-<!-- ================= 设备菜单 ================= -->
 <div id="devMenu" class="menu hidden">
   <div class="menu-head" id="menuTitle">设备</div>
   <button class="menu-item" data-act="rename">✏️ 重命名</button>
@@ -121,7 +123,6 @@
   <button class="menu-item danger" data-act="forget">🗑️ 移除设备</button>
 </div>
 
-<!-- ================= 设置 ================= -->
 <div id="settingsModal" class="modal hidden">
   <div class="modal-card">
     <div class="modal-head"><h3>⚙️ 设置</h3><button class="icon-btn" data-close="settingsModal">✕</button></div>
@@ -168,7 +169,6 @@
   </div>
 </div>
 
-<!-- ================= 强制门户 ================= -->
 <div id="portalModal" class="modal hidden">
   <div class="modal-card">
     <div class="modal-head"><h3>🌐 强制门户</h3><button class="icon-btn" data-close="portalModal">✕</button></div>
@@ -214,7 +214,6 @@
   </div>
 </div>
 
-<!-- ================= 诊断 ================= -->
 <div id="diagModal" class="modal hidden">
   <div class="modal-card">
     <div class="modal-head"><h3>🩺 诊断</h3><button class="icon-btn" data-close="diagModal">✕</button></div>
@@ -224,7 +223,6 @@
   </div>
 </div>
 
-<!-- ================= 输入弹窗 ================= -->
 <div id="promptModal" class="modal hidden">
   <div class="modal-card small">
     <div class="modal-head"><h3 id="promptTitle">输入</h3><button class="icon-btn" data-close="promptModal">✕</button></div>

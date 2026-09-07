@@ -28,7 +28,7 @@ CUSTOM_ICON_DIR: Path = DATA_DIR / "icons"
 CUSTOM_PORTAL_DIR: Path = DATA_DIR / "portal"
 
 PKG_DIR: Path = Path(__file__).resolve().parent.parent
-TEMPLATE_DIR: Path = PKG_DIR / "portal_templates"
+TEMPLATE_DIR: Path = PKG_DIR / "templates"
 SCRIPT_DIR: Path = PKG_DIR / "scripts"
 TETHERING_PS1: Path = SCRIPT_DIR / "tethering.ps1"
 ICS_PS1: Path = SCRIPT_DIR / "ics.ps1"

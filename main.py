@@ -40,14 +40,14 @@ def _check_platform() -> None:
 
 def selftest() -> int:
     """不弹窗的自检：验证各核心模块能否正常工作。"""
-    from hotspot_manager.core import netinfo, portal as portal_core, pshell, wificaps
-    from hotspot_manager.core.config import AppConfig
-    from hotspot_manager.core.deviceman import DeviceManager
-    from hotspot_manager.core.hotspot import HotspotController
-    from hotspot_manager.core.oui import identify
-    from hotspot_manager.core.storage import DeviceStore, TrafficDB, normalize_mac
-    from hotspot_manager.core.paths import TEMPLATE_DIR
-    from hotspot_manager.core.traffic import TrafficMonitor
+    from hotspot.core import netinfo, portal as portal_core, pshell, wificaps
+    from hotspot.core.config import AppConfig
+    from hotspot.core.deviceman import DeviceManager
+    from hotspot.core.hotspot import HotspotController
+    from hotspot.core.oui import identify
+    from hotspot.core.storage import DeviceStore, TrafficDB, normalize_mac
+    from hotspot.core.paths import TEMPLATE_DIR
+    from hotspot.core.traffic import TrafficMonitor
 
     ok = True
 
@@ -104,8 +104,8 @@ def selftest() -> int:
 
     tpl_count = check("欢迎页模板", lambda: len(list(TEMPLATE_DIR.glob('*.html'))))
     if tpl_count:
-        from hotspot_manager.core.config import PortalConfig
-        from hotspot_manager.core.portal import PortalContext, preview_html
+        from hotspot.core.config import PortalConfig
+        from hotspot.core.portal import PortalContext, preview_html
 
         check("模板渲染", lambda: len(preview_html(
             PortalConfig(template="aurora"),
@@ -132,7 +132,7 @@ def main() -> int:
                         help="（仅网页界面）开启 WebView 调试")
     args = parser.parse_args()
 
-    from hotspot_manager.core.paths import setup_logging
+    from hotspot.core.paths import setup_logging
 
     setup_logging(verbose=args.verbose)
     log = logging.getLogger("main")
@@ -155,7 +155,7 @@ def _main_web(args, log) -> int:
         print("  或改用传统界面：python main.py --tk")
         return 2
 
-    from hotspot_manager.webui.app import main as web_main
+    from hotspot.webui.app import main as web_main
 
     web_argv = []
     if args.verbose:
@@ -167,13 +167,13 @@ def _main_web(args, log) -> int:
 
 def _main_tk(args, log) -> int:
     """传统 Tkinter 界面（旧版，作为兼容回退）。"""
-    from hotspot_manager.core import netinfo, pshell
-    from hotspot_manager.core.config import AppConfig
-    from hotspot_manager.core.deviceman import DeviceManager
-    from hotspot_manager.core.hotspot import HotspotController
-    from hotspot_manager.core.portal import PortalContext, PortalManager
-    from hotspot_manager.core.storage import DeviceStore, TrafficDB
-    from hotspot_manager.core.traffic import TrafficMonitor
+    from hotspot.core import netinfo, pshell
+    from hotspot.core.config import AppConfig
+    from hotspot.core.deviceman import DeviceManager
+    from hotspot.core.hotspot import HotspotController
+    from hotspot.core.portal import PortalContext, PortalManager
+    from hotspot.core.storage import DeviceStore, TrafficDB
+    from hotspot.core.traffic import TrafficMonitor
 
     if sys.platform == "win32" and not pshell.is_admin() and not args.no_elevate:
         print("提示：当前不是管理员，热点开关可能失败。")
@@ -214,7 +214,7 @@ def _main_tk(args, log) -> int:
         print("      请安装官方 Python（勾选 tcl/tk 组件）后重试。")
         return 2
 
-    from hotspot_manager.ui.app import AppWindow
+    from hotspot.ui.app import AppWindow
 
     root = tk.Tk()
     try:

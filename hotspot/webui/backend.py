@@ -486,7 +486,7 @@ class HotspotBackend:
         import subprocess
         import sys
         exe = sys.executable
-        script = str(Path(__file__).resolve().parent.parent.parent / "main_web.py")
+        script = str(Path(__file__).resolve().parent.parent.parent / "main.py")
         value = f'"{exe}" "{script}"'
         args = ["reg", "add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
                 "/v", "WifiHotspotManager", "/t", "REG_SZ", "/d", value, "/f"] \
