@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi 热点管理器</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="titlebar pywebview-drag-region">
+  <div class="brand"><span class="logo">📡</span><span>WiFi 热点管理器</span></div>
+  <div class="tb-right">
+    <span id="adminBadge" class="badge">—</span>
+    <button id="btnPortal" class="icon-btn" title="强制门户">🌐</button>
+    <button id="btnSettings" class="icon-btn" title="设置">⚙️</button>
+    <button id="btnMin" class="icon-btn" title="最小化">─</button>
+    <button id="btnClose" class="icon-btn danger" title="关闭">✕</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ================= 左侧：开关与状态 ================= -->
+  <section class="panel left">
+    <div class="dial-wrap">
+      <div id="dial" class="dial">
+        <svg viewBox="0 0 240 240">
+          <defs>
+            <linearGradient id="gradOn" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3fb950"/>
+              <stop offset="55%" stop-color="#58A6FF"/>
+              <stop offset="100%" stop-color="#a371f7"/>
+            </linearGradient>
+            <linearGradient id="gradOff" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#39404d"/>
+              <stop offset="100%" stop-color="#2a3140"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="120" cy="120" r="98"/>
+          <circle id="ring" class="ring" cx="120" cy="120" r="98" transform="rotate(-90 120 120)"/>
+        </svg>
+        <div class="dial-inner">
+          <div id="dialEmoji" class="dial-emoji">📡</div>
+          <div id="dialText" class="dial-text">点击开启</div>
+          <div id="dialSub" class="dial-sub">未运行</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-line">
+      <span id="statusPill" class="pill">未开启</span>
+      <span id="uptimeText" class="muted small"></span>
+      <span id="backendText" class="muted small"></span>
+    </div>
+
+    <div class="cred-card">
+      <div class="cred-row">
+        <span class="cred-k">名称</span>
+        <span id="ssidText" class="cred-v">—</span>
+        <button id="copySsid" class="mini" title="复制">📋</button>
+      </div>
+      <div class="cred-div"></div>
+      <div class="cred-row">
+        <span class="cred-k">密码</span>
+        <span id="passText" class="cred-v mono">••••••••</span>
+        <button id="togglePass" class="mini" title="显示/隐藏">👁</button>
+        <button id="copyPass" class="mini" title="复制">📋</button>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-v" id="statOnline">0</div>
+        <div class="stat-k">在线</div>
+      </div>
+      <div class="stat">
+        <div class="stat-v down" id="statDown">0 B/s</div>
+        <div class="stat-k">下行</div>
+      </div>
+      <div class="stat">
+        <div class="stat-v up" id="statUp">0 B/s</div>
+        <div class="stat-k">上行</div>
+      </div>
+    </div>
+
+    <div id="warnBanner" class="banner hidden"></div>
+  </section>
+
+  <!-- ================= 右侧：设备列表 ================= -->
+  <section class="panel right">
+    <div class="right-head">
+      <h2>设备 <span id="devCount" class="chip">0</span></h2>
+      <div class="right-actions">
+        <span id="portalChip" class="chip chip-soft hidden">门户 未启动</span>
+        <button id="btnDiag" class="mini" title="诊断">🩺</button>
+        <button id="btnRefresh" class="mini" title="刷新">🔄</button>
+      </div>
+    </div>
+    <div id="deviceList" class="device-list">
+      <div class="dev skeleton"><div class="sk-emoji"></div><div class="sk-lines"><span></span><span></span></div></div>
+      <div class="dev skeleton"><div class="sk-emoji"></div><div class="sk-lines"><span></span><span></span></div></div>
+      <div class="dev skeleton"><div class="sk-emoji"></div><div class="sk-lines"><span></span><span></span></div></div>
+    </div>
+    <div id="emptyState" class="empty hidden">
+      <div class="empty-emoji">📶</div>
+      <div class="empty-text">开启热点后，连进来的设备会显示在这里</div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= 设备菜单 ================= -->
+<div id="devMenu" class="menu hidden">
+  <div class="menu-head" id="menuTitle">设备</div>
+  <button class="menu-item" data-act="rename">✏️ 重命名</button>
+  <div class="menu-sub">设备类型</div>
+  <div id="emojiRow" class="emoji-row"></div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-act="block" id="menuBlock">🚫 禁止上网</button>
+  <button class="menu-item" data-act="portal" id="menuPortal">🌐 放行门户</button>
+  <button class="menu-item danger" data-act="forget">🗑️ 移除设备</button>
+</div>
+
+<!-- ================= 设置 ================= -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h3>⚙️ 设置</h3><button class="icon-btn" data-close="settingsModal">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>热点名称</label>
+        <input id="cfgSsid" type="text" maxlength="32" placeholder="MyHotspot">
+      </div>
+      <div class="field">
+        <label>密码（至少 8 位）</label>
+        <input id="cfgPass" type="text" maxlength="63" placeholder="12345678">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>频段</label>
+          <select id="cfgBand">
+            <option value="auto">自动</option>
+            <option value="2.4">2.4 GHz</option>
+            <option value="5">5 GHz</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>控制后端</label>
+          <select id="cfgBackend">
+            <option value="auto">自动选择</option>
+            <option value="winrt">移动热点 (WinRT)</option>
+            <option value="netsh">承载网络 (netsh)</option>
+          </select>
+        </div>
+      </div>
+      <label class="switch-row">
+        <input id="cfgAutoStart" type="checkbox" class="switch">
+        <span>程序启动时自动开启热点</span>
+      </label>
+      <label class="switch-row">
+        <input id="cfgStartWin" type="checkbox" class="switch">
+        <span>开机自启</span>
+      </label>
+      <div class="modal-foot">
+        <button id="btnApply" class="btn ghost">立即下发配置</button>
+        <button id="btnSave" class="btn primary">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 强制门户 ================= -->
+<div id="portalModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🌐 强制门户</h3><button class="icon-btn" data-close="portalModal">✕</button></div>
+    <div class="modal-body">
+      <label class="switch-row">
+        <input id="pfEnabled" type="checkbox" class="switch">
+        <span>开启强制门户（连上热点先看到欢迎页，同意后才放行上网）</span>
+      </label>
+      <label class="switch-row">
+        <input id="pfDns" type="checkbox" class="switch">
+        <span>DNS 劫持（让设备自动弹出门户页，必需）</span>
+      </label>
+      <div class="field-row">
+        <div class="field">
+          <label>页面模板</label>
+          <select id="pfTemplate">
+            <option value="aurora">极光</option>
+            <option value="ocean">海风</option>
+            <option value="corporate">商务</option>
+            <option value="minimal">极简</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>按钮文字</label>
+          <input id="pfButton" type="text" placeholder="同意并开始上网">
+        </div>
+      </div>
+      <div class="field">
+        <label>标题</label>
+        <input id="pfTitle" type="text" placeholder="欢迎接入 {{ssid}}">
+      </div>
+      <div class="field">
+        <label>须知</label>
+        <textarea id="pfNotice" rows="3" placeholder="使用须知，每行一条"></textarea>
+      </div>
+      <div id="pfStatus" class="hint"></div>
+      <div class="modal-foot">
+        <button id="btnPfSave" class="btn ghost">保存</button>
+        <button id="btnPfStop" class="btn ghost">停止</button>
+        <button id="btnPfStart" class="btn primary">启动</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 诊断 ================= -->
+<div id="diagModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🩺 诊断</h3><button class="icon-btn" data-close="diagModal">✕</button></div>
+    <div class="modal-body">
+      <pre id="diagText" class="diag">正在收集…</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 输入弹窗 ================= -->
+<div id="promptModal" class="modal hidden">
+  <div class="modal-card small">
+    <div class="modal-head"><h3 id="promptTitle">输入</h3><button class="icon-btn" data-close="promptModal">✕</button></div>
+    <div class="modal-body">
+      <input id="promptInput" type="text" class="full">
+      <div class="modal-foot">
+        <button id="promptCancel" class="btn ghost">取消</button>
+        <button id="promptOk" class="btn primary">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

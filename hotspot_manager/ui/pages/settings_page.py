@@ -85,7 +85,6 @@ class SettingsPage(Page):
 
         demo_row, self.demo_tg = labeled_switch(
             sb, self.p, "演示数据", self.app.cfg.demo_mode,
-            "没有真实设备时，用 4 台模拟设备预览界面效果（数据会写入统计库，可一键清除）",
             on_change=self.on_demo)
         demo_row.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 0))
 
@@ -96,7 +95,6 @@ class SettingsPage(Page):
         bb.columnconfigure(0, weight=1)
         auto_row, self.autostart_tg = labeled_switch(
             bb, self.p, "随 Windows 开机启动", self._read_autostart(),
-            "写入注册表 HKCU\\Run，登录时自动启动本工具",
             on_change=self.on_autostart)
         auto_row.grid(row=0, column=0, sticky="ew")
         adm_row = ttk.Frame(bb, style="Surface.TFrame")

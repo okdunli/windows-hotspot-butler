@@ -1,7 +1,7 @@
-"""设备图标：全部用 Canvas 矢量绘制。
+"""设备图标：默认用 emoji 渲染（直观、跨主题一致），自定义图片仍走 PhotoImage。
 
-说明：Tk 8.6 无法正确渲染 U+1F4xx 这类非 BMP 彩色 emoji（会显示黑块），
-因此这里不依赖字体，直接用矩形/圆/多边形画，深浅主题自动跟随。
+说明：现代 Windows(10/11) + Tk 8.6.9+ 已能通过 "Segoe UI Emoji" 正常渲染彩色
+emoji；旧环境若只显示单色/方块也不影响功能。
 """
 from __future__ import annotations
 
@@ -17,6 +17,25 @@ ICON_KEYS: List[str] = [
 ]
 
 ICON_LABELS: Dict[str, str] = dict(DEVICE_TYPES)
+
+# 设备类型 -> emoji（直观、跨主题一致）
+DEVICE_EMOJI: Dict[str, str] = {
+    "phone": "📱", "tablet": "📟", "laptop": "💻", "desktop": "🖥️",
+    "tv": "📺", "console": "🎮", "watch": "⌚", "speaker": "🔊",
+    "camera": "📷", "printer": "🖨️", "router": "📡", "nas": "🗄️",
+    "iot": "💡", "car": "🚗", "unknown": "❓",
+}
+
+# 侧边栏导航项 -> emoji
+NAV_EMOJI: Dict[str, str] = {
+    "概览": "📊", "热点设置": "📶", "已连接设备": "📱",
+    "欢迎页": "🌐", "设置": "⚙️",
+}
+
+
+def emoji_font(size: int):
+    """返回能渲染 emoji 的字体（优先 Segoe UI Emoji，缺失时由系统回退）。"""
+    return ("Segoe UI Emoji", max(8, int(size)))
 
 
 def _r(c, x0, y0, x1, y1, r, **kw) -> int:
@@ -166,12 +185,21 @@ DRAWERS: Dict[str, Callable] = {
 
 def draw_icon(canvas, kind: str, x: float, y: float, size: int,
               color: str = "#79C0FF", bg: str = "#0D1117") -> None:
-    """在 canvas 的 (x,y,size,size) 区域内绘制设备图标。"""
-    drawer = DRAWERS.get(kind if kind in DRAWERS else "unknown")
+    """在 canvas 的 (x,y,size,size) 区域内绘制设备图标（emoji）。
+
+    自定义图片由调用方单独处理（见 devices_page 的 custom 分支）。
+    """
+    emoji = DEVICE_EMOJI.get(kind if kind in DEVICE_EMOJI else "unknown", "❓")
     try:
-        drawer(canvas, float(x), float(y), float(size), color, bg)
+        canvas.create_text(
+            x + size / 2, y + size / 2, text=emoji, anchor="center",
+            font=emoji_font(size * 0.8),
+        )
     except Exception:
-        _unknown(canvas, float(x), float(y), float(size), color, bg)
+        try:
+            canvas.create_text(x + size / 2, y + size / 2, text="?", anchor="center")
+        except Exception:
+            pass
 
 
 def load_custom_icon(path: str, size: int = 28):

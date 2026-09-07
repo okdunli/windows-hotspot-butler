@@ -133,19 +133,16 @@ class HotspotPage(Page):
 
         auto_row, self.auto_tg = labeled_switch(
             ab, self.p, "启动程序时自动开启热点", self.app.cfg.hotspot.auto_start,
-            "程序启动后自动尝试开启热点（需管理员权限）",
             on_change=lambda v: self._set_hotspot_cfg("auto_start", v))
         auto_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
         enf_row, self.enf_tg = labeled_switch(
             ab, self.p, "超出上限时提醒并标记新设备", self.app.cfg.hotspot.enforce_max_clients,
-            "Windows 未提供踢出设备的接口，超出上限时本工具会在设备列表标记并提醒",
             on_change=lambda v: self._set_hotspot_cfg("enforce_max_clients", v))
         enf_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
         wps_row, self.wps_tg = labeled_switch(
             ab, self.p, "WPS 一键配对", self.app.cfg.hotspot.wps_enabled,
-            "在 WPS 设备上按下配对按钮即可免密连接；受 Windows 接口限制，此开关仅作提示与记录",
             on_change=lambda v: self._set_hotspot_cfg("wps_enabled", v))
         wps_row.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.wps_hint = ttk.Label(ab, text="", style="Dim.TLabel", wraplength=520,
@@ -308,9 +305,12 @@ class HotspotPage(Page):
 
         # --- 后端 ---
         rec = caps.get("recommended_backend") or ""
-        if not caps.get("hosted_supported") and caps.get("soft_ap_supported") is not True:
+        if (not caps.get("hosted_supported")
+                and caps.get("soft_ap_supported") is not True
+                and caps.get("wifi_direct_supported") is not True
+                and not caps.get("winrt_available")):
             self.be_hint.configure(
-                text="本机网卡既不支持软 AP、也不支持承载网络，目前没有可用后端——"
+                text="本机网卡不支持软 AP / Wi-Fi Direct / 承载网络，目前没有可用后端——"
                      "需更换支持热点的无线网卡，或安装带虚拟 AP 驱动的共享软件。",
                 foreground=self.p.danger)
         elif rec == "netsh":
@@ -321,13 +321,17 @@ class HotspotPage(Page):
                 foreground=self.p.warning)
         else:
             winrt_ok = (caps.get("soft_ap_supported") is True
-                        or caps.get("wifi_direct_supported") is True)
+                        or caps.get("wifi_direct_supported") is True
+                        or bool(caps.get("winrt_available")))
+            winrt_text = ("可用（Wi-Fi Direct / 软 AP）"
+                          if (caps.get("soft_ap_supported") is True
+                              or caps.get("wifi_direct_supported") is True)
+                          else ("可用（Windows 移动热点 API）"
+                                if caps.get("winrt_available") else "本机网卡不支持软 AP / Wi-Fi Direct"))
             self.be_hint.configure(
                 text=("承载网络(hostednetwork)："
                       + ("可用" if caps.get("hosted_supported") else "本机网卡驱动不支持")
-                      + "；移动热点(WinRT)："
-                      + ("可用（Wi-Fi Direct / 软 AP）" if winrt_ok
-                         else "本机网卡不支持软 AP / Wi-Fi Direct")
+                      + "；移动热点(WinRT)：" + winrt_text
                       + "。推荐「自动选择」。"),
                 foreground=self.p.warning if not (caps.get("hosted_supported") or winrt_ok) else self.p.dim)
 
@@ -357,7 +361,7 @@ class HotspotPage(Page):
                 foreground=self.p.warning)
 
         # --- 开热点能力警告（在用户点击「开启热点」之前就提示） ---
-        can_host = caps.get("can_host_hotspot")
+        can_host = caps.get("can_host")
         if can_host is False:
             reason = (caps.get("host_block_reason")
                       or "本机无线网卡不支持承载 WiFi 热点。")

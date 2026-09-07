@@ -348,56 +348,19 @@ class Sidebar(tk.Frame):
 
 
 def _draw_nav_icon(canvas: tk.Canvas, label: str, color: str, bg: str, size: int) -> None:
-    """侧栏图标：按导航项名称绘制（纯矢量，不依赖 emoji 字体）。"""
-    s = size
-    c = canvas
-    w = s * 0.62
+    """侧栏图标：用 emoji 渲染（直观、跨主题一致）。"""
+    from .icons import NAV_EMOJI
 
-    def rect(x0, y0, x1, y1, fill=""):
-        c.create_rectangle(x0, y0, x1, y1, fill=fill or color, outline="")
-
-    def line(x0, y0, x1, y1, width=2):
-        c.create_line(x0, y0, x1, y1, fill=color, width=width)
-
-    def circle(cx, cy, r, fill=""):
-        c.create_oval(cx - r, cy - r, cx + r, cy + r, fill=fill or color, outline="")
-
-    if label == "概览":
-        rect(4, 4, w * .45, s * .55)
-        rect(w * .55, 4, s - 4, s * .45)
-        rect(4, s * .62, w * .45, s - 4)
-        rect(w * .55, s * .55, s - 4, s - 4)
-    elif label == "热点设置":
-        circle(s / 2, s * .70, s * .12)
-        for i, (rr, yy) in enumerate(((s * .18, s * .52), (s * .30, s * .38), (s * .42, s * .24))):
-            c.create_arc(s / 2 - rr, yy, s / 2 + rr, yy + rr * 1.35,
-                         start=200, extent=140, style="arc", outline=color, width=2)
-    elif label == "已连接设备":
-        rect(3, s * .22, s * .42, s - 5)
-        rect(s * .58, s * .22, s - 3, s - 5)
-        line(s * .22, s * .22, s * .22, s * .06)
-        line(s * .78, s * .22, s * .78, s * .06)
-        circle(s * .22, s * .04, s * .05)
-        circle(s * .78, s * .04, s * .05)
-    elif label == "欢迎页":
-        c.create_rectangle(3, 4, s - 3, s - 4, outline=color, width=2)
-        line(3, s * .28, s - 3, s * .28, 2)
-        line(s * .28, s * .50, s * .72, s * .50, 2)
-        line(s * .28, s * .66, s * .58, s * .66, 2)
-    elif label == "设置":
-        circle(s / 2, s / 2, s * .17, fill="")
-        c.create_oval(s / 2 - s * .17, s / 2 - s * .17, s / 2 + s * .17, s / 2 + s * .17,
-                      outline=color, width=2)
-        for i in range(8):
-            import math as _m
-
-            a = _m.radians(i * 45)
-            line(s / 2 + _m.cos(a) * s * .22, s / 2 + _m.sin(a) * s * .22,
-                 s / 2 + _m.cos(a) * s * .34, s / 2 + _m.sin(a) * s * .34, 2)
-    else:
-        circle(s / 2, s / 2, s * .28, fill="")
-        c.create_oval(s / 2 - s * .28, s / 2 - s * .28, s / 2 + s * .28, s / 2 + s * .28,
-                      outline=color, width=2)
+    emoji = NAV_EMOJI.get(label, "📦")
+    try:
+        canvas.create_text(size / 2, size / 2, text=emoji, anchor="center",
+                           font=("Segoe UI Emoji", max(12, int(size * 0.7))))
+    except Exception:
+        try:
+            canvas.create_text(size / 2, size / 2, text="•", anchor="center",
+                               fill=color, font=("Microsoft YaHei UI", int(size * 0.5)))
+        except Exception:
+            pass
 
 
 # --------------------------------------------------------------------------- #

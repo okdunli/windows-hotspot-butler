@@ -314,6 +314,8 @@ class HotspotController:
         self.last_status = HotspotStatus(state="unknown", backend="none")
         self.diagnostics: List[str] = []
         self.wlan_caps: Optional[wificaps.WlanCapabilities] = None
+        # 事实标记：一旦真的开成功过，后续一切能力提示都以此为准，不再误报“不支持”
+        self.ever_active: bool = False
 
     # ---- 网卡能力探测 ----
     def detect_capabilities(self, refresh: bool = False) -> wificaps.WlanCapabilities:
@@ -325,8 +327,14 @@ class HotspotController:
             data = self.winrt._call("probe", timeout=30)
             if data.get("ok") or data.get("ssid") is not None:
                 caps = wificaps.merge_tethering(caps, data)
+            # WinRT 移动热点 API 可用 = 本机可开热点（权威信号，盖过 netsh 误报）
+            caps.winrt_available = bool(data.get("ok")) or (
+                data.get("errorType") == "NO_INTERNET_PROFILE")
         except Exception:
             pass
+        # 把“实测结果”带给能力对象：静态探测只是预测，实测才是结论
+        caps.active_now = bool(self.last_status.active)
+        caps.ever_active = bool(self.ever_active or caps.active_now)
         self.wlan_caps = caps
         return caps
 
@@ -396,6 +404,7 @@ class HotspotController:
             "hosted_supported": caps.hosted_supported,
             "soft_ap_supported": caps.soft_ap_supported,
             "wifi_direct_supported": caps.wifi_direct_supported,
+            "winrt_available": caps.winrt_available,
             "can_host_hotspot": hc["can_host"],
             "host_block_reason": hc.get("reason", ""),
             "host_block_detail": hc.get("detail", ""),
@@ -433,6 +442,11 @@ class HotspotController:
             clients = []
         st.backend = getattr(be, "name", "?")
         self.last_status = st
+        if st.active:
+            self.ever_active = True
+            if self.wlan_caps is not None:
+                self.wlan_caps.active_now = True
+                self.wlan_caps.ever_active = True
 
         # 用 ARP 表补齐 IP（WinRT 有时只给 MAC）
         try:
@@ -480,6 +494,10 @@ class HotspotController:
         if not ok:
             msg = self._enrich_start_error(msg)
             return ok, msg
+        self.ever_active = True
+        if self.wlan_caps is not None:
+            self.wlan_caps.ever_active = True
+            self.wlan_caps.active_now = True
         # netsh 后端只建 AP、不共享上网，必须显式开 ICS 设备才能上网
         if getattr(be, "name", "") == "netsh":
             try:

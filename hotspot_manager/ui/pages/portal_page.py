@@ -36,7 +36,6 @@ class PortalPage(Page):
         top.body.columnconfigure(0, weight=1)
         row, self.enable_tg = labeled_switch(
             top.body, self.p, "启用欢迎页", self.app.cfg.portal.enabled,
-            "设备连上 WiFi 后打开任意网页会先看到欢迎页，点击按钮后才放行上网",
             on_change=self.on_toggle_enable)
         row.grid(row=0, column=0, sticky="ew")
         self.status_label = ttk.Label(top.body, text="", style="Muted.TLabel")
@@ -80,9 +79,7 @@ class PortalPage(Page):
         ttk.Button(brow, text="选择文件…", command=self.pick_custom).grid(
             row=0, column=1, padx=(8, 0))
         self.custom_hint = ttk.Label(
-            c, text="支持 {{ssid}} {{title}} {{subtitle}} {{notice}} {{notice_li}} "
-                    "{{button}} {{footer}} {{gateway}} {{clients}} {{time}} 占位符；"
-                    "同目录下的 css/js/图片可通过 /assets/文件名 引用。",
+            c, text="支持 {{ssid}} {{title}} 等占位符；同目录 css/js/图片用 /assets/ 引用。",
             style="Dim.TLabel", wraplength=620, justify="left")
         self.custom_hint.grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
 
@@ -102,14 +99,11 @@ class PortalPage(Page):
 
         dns_row, self.dns_tg = labeled_switch(
             pb, self.p, "DNS 重定向（强制弹出欢迎页）", self.app.cfg.portal.dns_redirect,
-            "接管 UDP 53 端口，把客户端的所有域名解析指向本机，触发系统自动弹窗；"
-            "若系统 DNS 服务占用该端口会失败",
             on_change=lambda v: self.on_param_change())
         dns_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
         req_row, self.req_tg = labeled_switch(
             pb, self.p, "必须点击同意按钮", self.app.cfg.portal.require_accept,
-            "关闭后仅展示欢迎页，不做同意记录",
             on_change=lambda v: self.on_param_change())
         req_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
@@ -138,8 +132,6 @@ class PortalPage(Page):
                                    insertbackground=self.p.text)
         self.notice_text.grid(row=4, column=1, sticky="ew", padx=(12, 0), pady=5)
         self.notice_text.insert("1.0", self.app.cfg.portal.notice)
-        ttk.Label(tb, text="每行一条；部分模板会自动渲染为列表项",
-                  style="Dim.TLabel").grid(row=5, column=1, sticky="w", padx=(12, 0))
 
         # ---------- 操作 ----------
         act = ttk.Frame(wrap.body, style="TFrame")

@@ -7,8 +7,8 @@ if exist "%PY%" goto :run
 
 where python >nul 2>nul
 if errorlevel 1 goto :nopy
-python -c "import tkinter" >nul 2>nul
-if errorlevel 1 goto :notk
+python -c "import webview" >nul 2>nul
+if errorlevel 1 goto :noweb
 python "%~dp0main.py" %*
 if errorlevel 1 pause
 goto :end
@@ -19,12 +19,13 @@ if errorlevel 1 pause
 goto :end
 
 :nopy
-echo Python not found. Please install Python 3.10+ (check "Add to PATH" and "tcl/tk").
+echo Python not found. Please install Python 3.10+ (check "Add to PATH").
 pause
 goto :end
 
-:notk
-echo tkinter is missing. Reinstall official Python and check "tcl/tk and IDLE".
+:noweb
+echo pywebview is missing. Run: pip install pywebview
+echo Or use the legacy Tkinter UI: python main.py --tk
 pause
 goto :end
 

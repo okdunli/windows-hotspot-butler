@@ -1,10 +1,15 @@
 """WiFi 热点管理器 —— 程序入口。
 
+默认启动【网页界面】（PyWebView + Edge WebView2），更流畅、动画更现代。
+传统 Tkinter 界面仍可通过 --tk / --legacy 启用（作为兼容回退，但较卡顿）。
+
 用法：
-    python main.py                 启动图形界面
+    python main.py                 启动网页界面（默认，更流畅）
+    python main.py --tk            启动传统 Tkinter 界面
     python main.py --selftest      仅做自检（不弹窗）
     python main.py --no-elevate    不提示提权
     python main.py --verbose       输出详细日志
+    python main.py --debug         （仅网页界面）开启 WebView 调试
 """
 from __future__ import annotations
 
@@ -119,12 +124,14 @@ def main() -> int:
     _check_platform()
     parser = argparse.ArgumentParser(description="WiFi 热点管理器")
     parser.add_argument("--selftest", action="store_true", help="仅自检，不启动界面")
-    parser.add_argument("--no-elevate", action="store_true", help="不提示以管理员身份重启")
+    parser.add_argument("--tk", "--legacy", dest="tk", action="store_true",
+                        help="使用传统 Tkinter 界面（默认是更流畅的网页界面）")
+    parser.add_argument("--no-elevate", action="store_true", help="不提示提权")
     parser.add_argument("--verbose", action="store_true", help="输出详细日志")
+    parser.add_argument("--debug", action="store_true",
+                        help="（仅网页界面）开启 WebView 调试")
     args = parser.parse_args()
 
-    from hotspot_manager.core import pshell
-    from hotspot_manager.core.config import AppConfig
     from hotspot_manager.core.paths import setup_logging
 
     setup_logging(verbose=args.verbose)
@@ -133,18 +140,46 @@ def main() -> int:
     if args.selftest:
         return selftest()
 
-    if sys.platform == "win32" and not pshell.is_admin() and not args.no_elevate:
-        print("提示：当前不是管理员，热点开关可能失败。")
-        print("      右键以管理员身份运行，或在「设置」页点击「以管理员身份重启」。")
+    if args.tk:
+        return _main_tk(args, log)
+    return _main_web(args, log)
 
-    # ---- 组装核心对象 ----
-    from hotspot_manager.core import netinfo
+
+def _main_web(args, log) -> int:
+    """默认界面：网页（PyWebView + Edge WebView2），更流畅、动画更现代。"""
+    try:
+        import webview  # noqa: F401
+    except ImportError:
+        print("缺少 pywebview，无法启动网页界面。")
+        print("  请先执行：pip install pywebview")
+        print("  或改用传统界面：python main.py --tk")
+        return 2
+
+    from hotspot_manager.webui.app import main as web_main
+
+    web_argv = []
+    if args.verbose:
+        web_argv.append("--verbose")
+    if args.debug:
+        web_argv.append("--debug")
+    return web_main(web_argv)
+
+
+def _main_tk(args, log) -> int:
+    """传统 Tkinter 界面（旧版，作为兼容回退）。"""
+    from hotspot_manager.core import netinfo, pshell
+    from hotspot_manager.core.config import AppConfig
     from hotspot_manager.core.deviceman import DeviceManager
     from hotspot_manager.core.hotspot import HotspotController
     from hotspot_manager.core.portal import PortalContext, PortalManager
     from hotspot_manager.core.storage import DeviceStore, TrafficDB
     from hotspot_manager.core.traffic import TrafficMonitor
 
+    if sys.platform == "win32" and not pshell.is_admin() and not args.no_elevate:
+        print("提示：当前不是管理员，热点开关可能失败。")
+        print("      右键以管理员身份运行，或在「设置」页点击「以管理员身份重启」。")
+
+    # ---- 组装核心对象 ----
     cfg = AppConfig.load()
     store = DeviceStore()
     db = TrafficDB()

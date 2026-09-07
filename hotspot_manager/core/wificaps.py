@@ -67,6 +67,12 @@ class WlanCapabilities:
     wpa2_supported: bool = True
     notes: List[str] = field(default_factory=list)
     raw: str = ""
+    # 事实标记：热点当前是否运行中 / 本次或历史是否成功开启过
+    active_now: bool = False
+    ever_active: bool = False
+    # WinRT 移动热点 API 是否可用（权威信号：可用即代表本机可开热点，
+    # 不受 netsh wlan show wirelesscapabilities 对 Soft AP / Wi-Fi Direct 的误报影响）
+    winrt_available: Optional[bool] = None
 
     @property
     def primary(self) -> Optional[WlanAdapter]:
@@ -102,6 +108,28 @@ class WlanCapabilities:
         只要其中一条可用，就能开热点——只是要用对后端。只有当三条都确认
         不支持时，才是真正的硬件限制、需要换网卡或装虚拟 AP 驱动。
         """
+        sa = self.soft_ap_supported
+        wfd = self.wifi_direct_supported
+        hosted = self.hosted_supported
+
+        # 权威信号优先：已实测开过 / 当前运行中 / WinRT 移动热点 API 可用，
+        # 都证明本机确实能开热点——直接放行，不被 netsh 静态误报干扰。
+        if self.ever_active or self.active_now or (self.winrt_available is True):
+            detail = "本机已实测可正常开启热点。"
+            if self.winrt_available is True and not (self.ever_active or self.active_now):
+                detail = "本机 Windows 移动热点 API 可用，可正常开启热点。"
+            backend = "winrt" if (sa is True or wfd is True or self.winrt_available is True) else (
+                "netsh" if hosted else "")
+            return {
+                "can_host": True,
+                "reason": "",
+                "soft_ap": sa,
+                "wifi_direct": wfd,
+                "hosted": hosted or None,
+                "backend": backend,
+                "detail": detail,
+            }
+
         if not self.adapters:
             return {
                 "can_host": False,
@@ -112,9 +140,6 @@ class WlanCapabilities:
                 "backend": "",
                 "detail": "请确认本机有无线网卡且已启用。",
             }
-        sa = self.soft_ap_supported
-        wfd = self.wifi_direct_supported
-        hosted = self.hosted_supported
         drv = self.primary.driver or self.primary.name
         name = self.primary.name
 
@@ -356,32 +381,18 @@ def probe_drivers() -> WlanCapabilities:
     # 只有明确列出无线电类型才认为结论可信
     caps.band_5_known = any(a.radios for a in caps.adapters)
 
-    if caps.soft_ap_supported is False:
-        if caps.wifi_direct_supported is True:
-            caps.notes.append(
-                "网卡「软 AP(Soft AP)」模式不支持，但支持 **Wi-Fi Direct**——"
-                "Windows 10/11 移动热点(WinRT) 正是基于 Wi-Fi Direct，因此仍可正常开热点；"
-                "若走「承载网络(netsh)」后端也可，前提是驱动支持承载网络。"
-            )
-        else:
-            caps.notes.append(
-                "无线网卡不支持「软 AP(Soft AP)」模式，Windows 移动热点无法用它发射 WiFi 信号，"
-                "开热点会失败（错误 WiFiDeviceOff）。需更换支持 Soft AP/承载网络的网卡。"
-            )
-    if caps.wifi_direct_supported is True and caps.soft_ap_supported is not True:
-        caps.notes.append(
-            "检测到 Wi-Fi Direct 支持：即使「软 AP」显示不支持，本机仍可用「移动热点(WinRT)」"
-            "或「承载网络(netsh)」发射热点（猎豹/360 等共享软件即走此能力）。"
-        )
-    if not caps.hosted_supported:
-        caps.notes.append(
-            "当前无线网卡驱动不支持「承载网络(hostednetwork)」，"
-            "netsh 后端不可用，请使用「移动热点(WinRT)」后端。"
-        )
+    # 事实优先：只要「Wi-Fi Direct」支持，移动热点就能开，绝不能报“开不了”。
+    # 软 AP(Soft AP) 只是旧式标志，不支持并不代表开不了热点。
+    if caps.wifi_direct_supported is True:
+        caps.notes.append("Wi-Fi Direct 可用 · 移动热点正常")
+    elif caps.soft_ap_supported is True:
+        caps.notes.append("软 AP 可用 · 移动热点正常")
+    elif caps.hosted_supported:
+        caps.notes.append("承载网络可用 · 使用 netsh 后端")
+    elif caps.soft_ap_supported is False and caps.wifi_direct_supported is False:
+        caps.notes.append("未检测到可用的热点发射能力")
     if caps.band_5_known and not caps.band_5_supported:
-        caps.notes.append(
-            "无线网卡无线电类型不含 5 GHz，5 GHz 选项即使选择也会被系统忽略。"
-        )
+        caps.notes.append("网卡为 2.4 GHz 单频")
     return caps
 
 
