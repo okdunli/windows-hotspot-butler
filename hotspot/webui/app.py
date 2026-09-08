@@ -91,9 +91,13 @@ def main(argv: list | None = None) -> int:
                 title="热点浮窗",
                 url=MINI_FILE.as_uri(),
                 js_api=api,
-                width=190, height=64, resizable=False,
+                width=190, height=64,
+                min_size=(190, 64),     # 默认 (200,100) 会把小窗强制撑大
+                resizable=False,
                 frameless=True, easy_drag=True, on_top=True,
-                hidden=False, background_color="#11151f",
+                shadow=False,           # 阴影会在圆角外画出直角框
+                transparent=True,       # 透明窗口才能露出真圆角（EdgeChromium）
+                hidden=False,
             )
             mini_holder["win"] = mw
             api._close_mini = close_mini

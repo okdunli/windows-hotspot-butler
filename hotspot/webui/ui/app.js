@@ -61,6 +61,8 @@
     const btn = $("#btnTheme");
     if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
     try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
+    // 同步到后端配置，迷你悬浮窗等其它窗口跟随
+    try { window.pywebview && window.pywebview.api.set_theme(t); } catch (e) { /* 忽略 */ }
   }
   function initTheme() {
     let saved = null;

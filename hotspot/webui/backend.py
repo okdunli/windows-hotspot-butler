@@ -964,6 +964,13 @@ class HotspotBackend:
             return {"ok": False, "msg": str(exc)}
 
     # --------------------------- 迷你悬浮窗 --------------------------- #
+    def set_theme(self, theme: str) -> Dict[str, Any]:
+        """主窗口切主题时同步到配置，浮窗等其它窗口读取跟随。"""
+        if theme in ("dark", "light"):
+            self.cfg.theme = theme
+            self.cfg.save()
+        return {"ok": True}
+
     def mini_state(self) -> Dict[str, Any]:
         """迷你浮窗专用轻量状态（只读缓存，不触发任何采集）。"""
         with self._lock:
@@ -971,7 +978,8 @@ class HotspotBackend:
         st = self.controller.last_status
         stats = snap.get("stats", {})
         return {"active": bool(st.active), "online": stats.get("online", 0),
-                "down": stats.get("down", 0), "up": stats.get("up", 0)}
+                "down": stats.get("down", 0), "up": stats.get("up", 0),
+                "theme": self.cfg.theme}
 
     def mini_toggle(self) -> Dict[str, Any]:
         return self.toggle()
