@@ -15,6 +15,8 @@
   <div class="tb-right">
     <span id="adminBadge" class="badge">—</span>
     <button id="btnTheme" class="icon-btn" title="切换浅色/深色">🌙</button>
+    <button id="btnStats" class="icon-btn" title="统计">📊</button>
+    <button id="btnTools" class="icon-btn" title="工具箱">🧰</button>
     <button id="btnPortal" class="icon-btn" title="强制门户">🌐</button>
     <button id="btnSettings" class="icon-btn" title="设置">⚙️</button>
     <button id="btnMin" class="icon-btn" title="最小化">─</button>
@@ -266,6 +268,59 @@
     <div class="modal-body" style="align-items:center;text-align:center">
       <img id="qrImage" alt="WiFi 二维码" style="width:220px;height:220px;border-radius:12px;background:#fff;padding:8px">
       <div class="hint">用手机相机扫码即可连接此热点，无需手动输入密码</div>
+    </div>
+  </div>
+</div>
+
+<div id="statsModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h3>📊 流量统计</h3><button class="icon-btn" data-close="statsModal">✕</button></div>
+    <div class="modal-body">
+      <div class="stat-row" style="margin-bottom:10px">
+        <div class="stat"><div class="stat-v" id="stTotal">—</div><div class="stat-k">累计</div></div>
+        <div class="stat"><div class="stat-v down" id="stRx">—</div><div class="stat-k">接收</div></div>
+        <div class="stat"><div class="stat-v up" id="stTx">—</div><div class="stat-k">发送</div></div>
+      </div>
+      <div class="field"><label>每日流量（近 14 天）</label>
+        <div id="statDaily" class="bar-chart"></div>
+      </div>
+      <div class="field"><label>用量 TOP 设备</label>
+        <div id="statTop" class="top-list"></div>
+      </div>
+      <div class="field"><label>域名访问排行</label>
+        <div id="statDomains" class="top-list"></div>
+      </div>
+      <div class="field"><label>最近 DNS 访问（URL 日志）</label>
+        <div id="statQueries" class="query-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toolsModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🧰 工具箱</h3><button class="icon-btn" data-close="toolsModal">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>📤 文件共享（手机浏览器打开即可互传文件）</label>
+        <div class="hint" id="shareStatus">未启动</div>
+        <div class="modal-foot" style="justify-content:flex-start">
+          <button id="btnShareStart" class="btn primary">启动</button>
+          <button id="btnShareStop" class="btn ghost">停止</button>
+          <button id="btnShareFolder" class="btn ghost">打开共享目录</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>🎮 端口转发（游戏模式 · TCP）</label>
+        <div class="field-row">
+          <input id="pfName" type="text" placeholder="名称" style="max-width:110px">
+          <input id="pfLPort" type="number" placeholder="本机端口" style="max-width:100px">
+          <input id="pfIp" type="text" placeholder="设备 IP" style="max-width:120px">
+          <input id="pfCPort" type="number" placeholder="设备端口" style="max-width:100px">
+          <button id="btnPfAdd" class="btn primary">添加</button>
+        </div>
+        <div id="pfList" class="top-list"></div>
+      </div>
     </div>
   </div>
 </div>

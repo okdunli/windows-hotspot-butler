@@ -352,6 +352,96 @@
     setText($("#pfStatus"), txt);
   }
 
+  function renderStats(r) {
+    if (!r || !r.ok) { toast((r && r.msg) || "统计读取失败", "error"); return; }
+    setText($("#stTotal"), (r.grand && r.grand.total) || "0 B");
+    setText($("#stRx"), (r.grand && r.grand.rx) || "0 B");
+    setText($("#stTx"), (r.grand && r.grand.tx) || "0 B");
+    // 每日流量条形图（纯 CSS，无依赖）
+    const box = $("#statDaily");
+    const daily = r.daily || [];
+    const maxV = Math.max(1, ...daily.map((d) => d.rx + d.tx));
+    box.innerHTML = "";
+    daily.forEach((d) => {
+      const row = document.createElement("div");
+      row.className = "bar-row";
+      const total = d.rx + d.tx;
+      const label = document.createElement("span");
+      label.className = "bar-day";
+      label.textContent = d.day.slice(5);
+      const track = document.createElement("div");
+      track.className = "bar-track";
+      const bar = document.createElement("div");
+      bar.className = "bar-fill";
+      bar.style.width = (total / maxV * 100).toFixed(1) + "%";
+      track.appendChild(bar);
+      const val = document.createElement("span");
+      val.className = "bar-val";
+      val.textContent = total > 0 ? d.total_text : "";
+      row.appendChild(label); row.appendChild(track); row.appendChild(val);
+      box.appendChild(row);
+    });
+    // TOP 设备
+    const top = $("#statTop");
+    top.innerHTML = "";
+    (r.top || []).forEach((t, i) => {
+      const el = document.createElement("div");
+      el.className = "top-item";
+      el.innerHTML = '<span class="top-rank">' + (i + 1) + "</span>" +
+        '<span class="top-name"></span><span class="size"></span>';
+      setText($(".top-name", el), t.name);
+      setText($(".size", el), t.total_text);
+      top.appendChild(el);
+    });
+    if (!(r.top || []).length) top.innerHTML = '<div class="hint">暂无数据</div>';
+    // 域名排行
+    const dom = $("#statDomains");
+    dom.innerHTML = "";
+    (r.top_domains || []).forEach((d) => {
+      const el = document.createElement("div");
+      el.className = "top-item";
+      el.innerHTML = '<span class="top-name"></span><span class="size"></span>';
+      setText($(".top-name", el), d.domain);
+      setText($(".size", el), d.c + " 次");
+      dom.appendChild(el);
+    });
+    if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">暂无记录（开启强制门户并启用 DNS 劫持后开始记录）</div>';
+    // 最近访问
+    const q = $("#statQueries");
+    q.innerHTML = "";
+    (r.queries || []).slice(0, 40).forEach((it) => {
+      const el = document.createElement("div");
+      el.className = "query-item";
+      el.innerHTML = '<span class="q-time"></span><span class="top-name"></span><span class="size"></span>';
+      setText($(".q-time", el), it.time_text || "");
+      setText($(".top-name", el), it.domain);
+      setText($(".size", el), it.name || it.ip || "");
+      q.appendChild(el);
+    });
+    if (!(r.queries || []).length) q.innerHTML = '<div class="hint">暂无记录</div>';
+  }
+
+  function fillTools() {
+    const st = state || {};
+    const s = st.share || {};
+    setText($("#shareStatus"),
+      s.running ? ("运行中 · 手机浏览器打开：" + (s.url || "")) : "未启动");
+    // 端口转发列表
+    const list = $("#pfList");
+    list.innerHTML = "";
+    (st.port_fwd || []).forEach((r) => {
+      const el = document.createElement("div");
+      el.className = "top-item";
+      el.innerHTML = '<span class="top-name"></span><span class="size"></span>' +
+        '<button class="mini danger-mini" title="删除">🗑️</button>';
+      setText($(".top-name", el), r.name + "：" + r.listen_port + " → " + r.connect_ip + ":" + r.connect_port);
+      $("button", el).addEventListener("click", () =>
+        api().pf_remove(r.name).then((res) => { toast(res.msg, res.ok ? "success" : "error"); fillTools(); }));
+      list.appendChild(el);
+    });
+    if (!(st.port_fwd || []).length) list.innerHTML = '<div class="hint">暂无转发规则</div>';
+  }
+
   function bind() {
     // 窗口
     $("#btnMin").addEventListener("click", () => api().minimize());
@@ -359,6 +449,31 @@
 
     // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
+
+    // 统计
+    $("#btnStats").addEventListener("click", () => {
+      openModal("statsModal");
+      api().get_stats_report().then(renderStats);
+    });
+
+    // 工具箱
+    $("#btnTools").addEventListener("click", () => { fillTools(); openModal("toolsModal"); });
+    $("#btnShareStart").addEventListener("click", () =>
+      api().share_start().then(() => setTimeout(fillTools, 600)));
+    $("#btnShareStop").addEventListener("click", () =>
+      api().share_stop().then(() => setTimeout(fillTools, 600)));
+    $("#btnShareFolder").addEventListener("click", () => api().share_open_folder());
+    $("#btnPfAdd").addEventListener("click", () => {
+      const name = $("#pfName").value.trim();
+      const lp = parseInt($("#pfLPort").value, 10);
+      const ip = $("#pfIp").value.trim();
+      const cp = parseInt($("#pfCPort").value, 10);
+      if (!lp || !ip || !cp) { toast("请填写完整的端口转发信息", "error"); return; }
+      api().pf_add(name, lp, ip, cp).then((r) => {
+        toast(r.msg, r.ok ? "success" : "error");
+        if (r.ok) { $("#pfName").value = $("#pfLPort").value = $("#pfIp").value = $("#pfCPort").value = ""; fillTools(); }
+      });
+    });
 
     // WiFi 二维码
     $("#btnQr").addEventListener("click", () => {

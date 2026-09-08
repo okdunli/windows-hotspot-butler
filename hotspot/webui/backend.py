@@ -22,8 +22,10 @@ from ..core.captive import CaptivePortal
 from ..core.config import AppConfig, PortalConfig
 from ..core.deviceman import DeviceManager
 from ..core.hotspot import HotspotController, RawClient
-from ..core.paths import DATA_DIR, ensure_dirs
+from ..core.paths import DATA_DIR, SHARE_DIR, ensure_dirs
 from ..core.portal import PortalContext
+from ..core.portforward import PortForwarder
+from ..core.share import FileShare
 from ..core.storage import DeviceStore, TrafficDB, human_bytes, human_rate, normalize_mac
 from ..core.traffic import TrafficMonitor
 
@@ -105,7 +107,12 @@ class HotspotBackend:
             get_clients=lambda: sum(1 for d in self.devman.all() if d.online),
             mac_of_ip=lambda ip: self._arp.get(ip, ""),
         )
-        self.captive = CaptivePortal(self.ctx, on_accept=self._on_portal_accept)
+        self.captive = CaptivePortal(self.ctx, on_accept=self._on_portal_accept,
+                                     on_dns_query=self._on_dns_query)
+        self.share = FileShare(SHARE_DIR, port=8081,
+                               title_provider=lambda: self.cfg.hotspot.ssid,
+                               gateway_provider=lambda: self.gateway)
+        self.portfwd = PortForwarder()
 
         self._lock = threading.RLock()
         self._busy: Dict[str, float] = {}
@@ -148,6 +155,10 @@ class HotspotBackend:
         except Exception:
             pass
         try:
+            self.share.stop()
+        except Exception:
+            pass
+        try:
             self.traffic.stop()
         except Exception:
             pass
@@ -176,7 +187,26 @@ class HotspotBackend:
                 log.debug("托盘通知失败", exc_info=True)
 
     def _on_portal_accept(self, ip: str, mac: str, ua: str) -> None:
+        maxn = int(self.cfg.hotspot.max_clients or 0)
+        if maxn:
+            online = sum(1 for d in self.devman.all() if d.online)
+            if online > maxn:
+                try:
+                    self.captive.revoke_ip(ip, mac)
+                except Exception:
+                    pass
+                self._toast(f"已拒绝 {ip}：设备数超过上限 {maxn} 台", "error")
+                return
         self._toast(f"{ip} 已通过欢迎页并开始上网", "success")
+
+    def _on_dns_query(self, ip: str, domain: str) -> None:
+        """DNS 劫持路径上的域名记录（URL 访问日志，竞品的 URL Logging 功能）。"""
+        if not domain or domain.endswith((".arpa", ".lan", ".local", ".localdomain")):
+            return
+        try:
+            self.db.record_dns_query(ip, self._arp.get(ip, ""), domain)
+        except Exception:
+            log.debug("DNS 记录失败", exc_info=True)
 
     @staticmethod
     def _load_gateway() -> str:
@@ -434,6 +464,8 @@ class HotspotBackend:
                 "portal_button": self.cfg.portal.button,
             },
             "portal": self.captive.status(),
+            "share": self.share.status(),
+            "port_fwd": self.portfwd.list_rules(),
             "gateway": self.gateway,
             "auto_stop": self.stop_status(),
             "icons": [{"key": k, "label": v} for k, v in ICON_CHOICES],
@@ -815,6 +847,67 @@ class HotspotBackend:
         except Exception:
             pass
         return {"ok": True}
+
+    # --------------------------- 统计报表 ----------------------------- #
+    def get_stats_report(self) -> Dict[str, Any]:
+        """流量统计 + 用量 TOP + 域名访问记录（竞品 Statistics / URL Logging）。"""
+        try:
+            daily = self.db.daily_all(14)
+            names: Dict[str, str] = {}
+            for rec in self.store.all():
+                names[rec["mac"]] = self.store.display_name(rec) or rec["mac"]
+            top = [{"name": names.get(t["mac"], t["mac"]), "mac": t["mac"],
+                    "total_text": human_bytes(t["rx"] + t["tx"])}
+                   for t in self.db.top_devices(8)]
+            queries = self.db.dns_queries(80)
+            for q in queries:
+                q["time_text"] = time.strftime("%H:%M:%S", time.localtime(q["ts"]))
+                q["name"] = names.get(q.get("mac") or "", q.get("ip") or "")
+            domains = self.db.top_domains(10)
+            grand = self.db.grand_total()
+            return {
+                "ok": True,
+                "daily": [{"day": d, "rx": rx, "tx": tx,
+                           "total_text": human_bytes(rx + tx)} for d, rx, tx in daily],
+                "top": top,
+                "queries": queries,
+                "top_domains": domains,
+                "grand": {"rx": human_bytes(grand[0]), "tx": human_bytes(grand[1]),
+                          "total": human_bytes(grand[0] + grand[1])},
+            }
+        except Exception as exc:
+            log.exception("统计报表失败")
+            return {"ok": False, "msg": str(exc)}
+
+    # --------------------------- 文件共享 ----------------------------- #
+    def share_start(self) -> Dict[str, Any]:
+        def work():
+            return self.share.start()
+        return self._run("share", work)
+
+    def share_stop(self) -> Dict[str, Any]:
+        def work():
+            return self.share.stop()
+        return self._run("share", work)
+
+    def share_open_folder(self) -> Dict[str, Any]:
+        try:
+            SHARE_DIR.mkdir(parents=True, exist_ok=True)
+            import os
+            os.startfile(str(SHARE_DIR))  # noqa: S606
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "msg": str(exc)}
+
+    # --------------------------- 端口转发 ----------------------------- #
+    def pf_add(self, name: str, listen_port: int, connect_ip: str,
+               connect_port: int, proto: str = "tcp") -> Dict[str, Any]:
+        ok, msg = self.portfwd.add(name, listen_port, connect_ip, connect_port, proto)
+        return {"ok": ok, "msg": msg}
+
+    def pf_remove(self, name: str) -> Dict[str, Any]:
+        ok, msg = self.portfwd.remove(name)
+        return {"ok": ok, "msg": msg}
 
     def pick_portal_file(self) -> Dict[str, Any]:
         """用系统文件对话框挑选自定义门户 HTML。"""

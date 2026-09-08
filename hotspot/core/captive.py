@@ -179,6 +179,7 @@ class DnsProxy(threading.Thread):
         self._stop = threading.Event()
         self._pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="dns")
         self._local_cache: Optional[Set[str]] = None
+        self.on_query: Optional[Callable[[str, str], None]] = None  # (ip, domain)
 
     # ---- 生命周期 ----
     def bind(self) -> bool:
@@ -253,11 +254,16 @@ class DnsProxy(threading.Thread):
         if flags & 0x8000:            # 不是查询
             return None
         try:
-            _qname, end = parse_qname(data)
+            qname, end = parse_qname(data)
             qtype, _qclass = struct.unpack("!HH", data[end:end + 4])
         except Exception:
             return None
         self.query_count += 1
+        if self.on_query and qname:
+            try:
+                self.on_query(src, qname)
+            except Exception:
+                pass
         # 本机自身（网关 / 各网卡 IP / 回环）的查询绝不劫持，否则会把自己也搞断网；
         # 已放行设备正常转发；其余未放行客户端的 A 记录劫持到网关，强制弹出门户。
         if src in self._local_ips() or self.allow.has(ip=src):
@@ -458,9 +464,11 @@ class CaptivePortal:
     """强制门户总入口：DNS 劫持 + 80 端口门户 + 放行名单。"""
 
     def __init__(self, ctx: PortalContext,
-                 on_accept: Optional[Callable[[str, str, str], None]] = None) -> None:
+                 on_accept: Optional[Callable[[str, str, str], None]] = None,
+                 on_dns_query: Optional[Callable[[str, str], None]] = None) -> None:
         self.ctx = ctx
         self.on_accept = on_accept
+        self.on_dns_query = on_dns_query
         self.allow = AllowList()
         self.cfg = PortalConfig()
         self._http: Optional[CaptiveServer] = None
@@ -534,6 +542,7 @@ class CaptivePortal:
 
     def _start_dns(self, gateway: str) -> None:
         dns = DnsProxy(gateway, self.allow)
+        dns.on_query = self.on_dns_query
         if dns.bind():
             dns.start()
             self._dns = dns
@@ -546,6 +555,7 @@ class CaptivePortal:
         _service("stop")
         time.sleep(1.2)
         dns2 = DnsProxy(gateway, self.allow)
+        dns2.on_query = self.on_dns_query
         if dns2.bind():
             dns2.start()
             self._dns = dns2

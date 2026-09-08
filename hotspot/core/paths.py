@@ -26,6 +26,7 @@ TRAFFIC_DB: Path = DATA_DIR / "traffic.sqlite3"
 LOG_DIR: Path = DATA_DIR / "logs"
 CUSTOM_ICON_DIR: Path = DATA_DIR / "icons"
 CUSTOM_PORTAL_DIR: Path = DATA_DIR / "portal"
+SHARE_DIR: Path = DATA_DIR / "share"
 
 PKG_DIR: Path = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR: Path = PKG_DIR / "templates"
@@ -33,7 +34,7 @@ SCRIPT_DIR: Path = PKG_DIR / "scripts"
 TETHERING_PS1: Path = SCRIPT_DIR / "tethering.ps1"
 ICS_PS1: Path = SCRIPT_DIR / "ics.ps1"
 
-_ALL_DIRS = (DATA_DIR, LOG_DIR, CUSTOM_ICON_DIR, CUSTOM_PORTAL_DIR)
+_ALL_DIRS = (DATA_DIR, LOG_DIR, CUSTOM_ICON_DIR, CUSTOM_PORTAL_DIR, SHARE_DIR)
 
 
 def ensure_dirs() -> None:

@@ -544,3 +544,28 @@ select option{background:var(--panel-solid);color:var(--text)}
 .toast.error{border-color:rgba(248,81,73,.45)}
 .toast.error::before{content:"⚠️ "}
 .toast.info::before{content:"ℹ️ "}
+
+/* 统计面板 */
+.bar-chart{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.bar-day{width:38px;color:var(--muted);flex:none}
+.bar-track{flex:1;height:12px;background:var(--input-bg);border-radius:6px;overflow:hidden}
+.bar-fill{height:100%;border-radius:6px;
+  background:linear-gradient(90deg,#58A6FF,#a371f7);
+  animation:barIn .6s var(--ease) both;transition:width .4s var(--ease)}
+@keyframes barIn{from{width:0 !important;opacity:0}to{opacity:1}}
+.bar-val{width:64px;text-align:right;color:var(--muted);flex:none}
+.top-list{display:flex;flex-direction:column;gap:2px;max-height:150px;overflow:auto}
+.top-item{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:8px;font-size:12.5px}
+.top-item:hover{background:var(--hover)}
+.top-rank{width:18px;height:18px;border-radius:5px;background:var(--input-bg);
+  display:grid;place-items:center;font-size:10.5px;color:var(--muted);flex:none}
+.top-item:first-child .top-rank{background:linear-gradient(135deg,#58A6FF,#a371f7);color:#fff}
+.top-name{flex:1;word-break:break-all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top-item .size{color:var(--muted);font-size:11px;white-space:nowrap}
+.danger-mini:hover{background:rgba(248,81,73,.15)}
+.query-list{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:2px}
+.query-item{display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:7px;font-size:11.5px}
+.query-item:hover{background:var(--hover)}
+.q-time{color:var(--muted);flex:none;font-family:"Cascadia Mono",Consolas,monospace;font-size:10.5px}
+.query-item .size{color:var(--muted);font-size:10.5px;white-space:nowrap}

@@ -236,6 +236,11 @@ class TrafficDB:
                     ip TEXT, mac TEXT, ua TEXT,
                     accepted INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS dns_queries(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    ip TEXT, mac TEXT, domain TEXT
+                );
                 CREATE INDEX IF NOT EXISTS idx_daily_day ON daily(day);
                 """
             )
@@ -336,6 +341,31 @@ class TrafficDB:
             out.append((d, rx, tx))
         return out
 
+    def daily_all(self, days: int = 14) -> List[Tuple[str, int, int]]:
+        """全部设备按日汇总的 (日期, rx, tx)，缺失补 0。"""
+        start = datetime.now().date() - timedelta(days=days - 1)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT day, SUM(rx) rx, SUM(tx) tx FROM daily WHERE day>=? GROUP BY day ORDER BY day",
+                (start.strftime("%Y-%m-%d"),),
+            ).fetchall()
+        got = {r["day"]: (int(r["rx"]), int(r["tx"])) for r in rows}
+        out: List[Tuple[str, int, int]] = []
+        for i in range(days):
+            d = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+            rx, tx = got.get(d, (0, 0))
+            out.append((d, rx, tx))
+        return out
+
+    def top_devices(self, limit: int = 8) -> List[Dict[str, Any]]:
+        """用量 TOP 设备（按累计 rx+tx 降序）。"""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT mac, rx, tx FROM totals ORDER BY (rx+tx) DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [{"mac": r["mac"], "rx": int(r["rx"]), "tx": int(r["tx"])} for r in rows]
+
     def sessions(self, mac: str, limit: int = 10) -> List[Dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
@@ -353,6 +383,37 @@ class TrafficDB:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def record_dns_query(self, ip: str, mac: str, domain: str) -> None:
+        if not domain:
+            return
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO dns_queries(ts, ip, mac, domain) VALUES(?,?,?,?)",
+                (time.time(), ip or "", normalize_mac(mac), domain[:120]),
+            )
+            # 简单滚动清理：只保留最近 5000 条
+            self._conn.execute(
+                "DELETE FROM dns_queries WHERE id NOT IN "
+                "(SELECT id FROM dns_queries ORDER BY id DESC LIMIT 5000)"
+            )
+            self._conn.commit()
+
+    def dns_queries(self, limit: int = 100) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT ts, ip, mac, domain FROM dns_queries "
+                "ORDER BY id DESC LIMIT ?", (int(limit),)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def top_domains(self, limit: int = 10) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT domain, COUNT(*) c FROM dns_queries GROUP BY domain "
+                "ORDER BY c DESC LIMIT ?", (int(limit),)
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def reset_device(self, mac: str) -> None:
         mac = normalize_mac(mac)
         with self._lock:
@@ -360,6 +421,7 @@ class TrafficDB:
             cur.execute("DELETE FROM totals WHERE mac=?", (mac,))
             cur.execute("DELETE FROM daily WHERE mac=?", (mac,))
             cur.execute("DELETE FROM sessions WHERE mac=?", (mac,))
+            cur.execute("DELETE FROM dns_queries WHERE mac=?", (mac,))
             self._conn.commit()
 
     def close(self) -> None:
