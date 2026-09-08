@@ -1,13 +1,16 @@
 # WiFi 热点管理器 —— 依赖说明
 #
-# 本工具零依赖即可运行（只用 Python 标准库 + tkinter）。
-# 下面两项是可选增强，装上后能解锁「每台设备的精确流量统计」。
+# 必装：网页界面（默认界面）依赖 pywebview（Edge WebView2）
+pywebview>=5.0
 
-# 1) 抓包库（精确统计每台设备的上行/下行）
+# 托盘功能（关闭时最小化到托盘）：pystray + Pillow
+pystray>=0.19
+
+# 1) 精确流量统计（可选）：每台设备的上行/下行抓包
 scapy>=2.5.0
 
 # 2) 抓包驱动（Windows 必装，安装时勾选 "Install Npcap in WinPcap API-compatible Mode"）
 #    https://npcap.com/#download
 
-# 3) 可选：让自定义设备图标支持 jpg / 大尺寸缩放
+# 3) Pillow 同时用于托盘图标绘制
 Pillow>=10.0.0

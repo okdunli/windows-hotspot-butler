@@ -81,8 +81,15 @@
     wipe.style.setProperty("--wy", y + "px");
     wipe.style.setProperty("--wipe-color", next === "light" ? "#eef1f6" : "#0b0e14");
     document.body.appendChild(wipe);
-    setTimeout(() => applyTheme(next), 260);        // 擦除过半时切换
-    setTimeout(() => { wipe.remove(); root.classList.add("theme-anim"); setTimeout(() => root.classList.remove("theme-anim"), 420); }, 560);
+    setTimeout(() => {
+      applyTheme(next);                     // 铺满瞬间切换
+      wipe.classList.add("slide-out");      // 上滑渐隐露出新主题
+    }, 240);
+    setTimeout(() => {
+      wipe.remove();
+      root.classList.add("theme-anim");     // 兜底平滑残余色差
+      setTimeout(() => root.classList.remove("theme-anim"), 300);
+    }, 620);
   }
 
   /* 数值变化时的闪动反馈 */

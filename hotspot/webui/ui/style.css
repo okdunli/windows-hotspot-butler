@@ -426,14 +426,21 @@ html[data-theme="light"] .modal{background:rgba(120,135,160,.32)}
 @keyframes modalOut{to{opacity:0}}
 @keyframes cardOut{to{opacity:0;transform:scale(.94) translateY(10px)}}
 
-/* 主题切换：全屏圆形擦除 */
+/* 主题切换：圆形擦除铺满 → 上滑渐隐露出新主题 */
 .theme-wipe{
   position:fixed;inset:0;z-index:200;pointer-events:none;
   clip-path:circle(0px at var(--wx,50%) var(--wy,50%));
   background:var(--wipe-color,#0b0e14);
-  animation:wipe .55s var(--ease) forwards;
+  animation:wipe .3s var(--ease) forwards;
 }
 @keyframes wipe{to{clip-path:circle(150% at var(--wx,50%) var(--wy,50%))}}
+.theme-wipe.slide-out{
+  animation:wipeSlide .34s var(--ease) forwards;
+}
+@keyframes wipeSlide{
+  0%{clip-path:circle(150% at var(--wx,50%) var(--wy,50%));transform:translateY(0);opacity:1}
+  100%{clip-path:circle(150% at var(--wx,50%) var(--wy,50%));transform:translateY(-100%);opacity:.25}
+}
 .modal-card{
   width:min(560px,92vw);max-height:86vh;overflow:hidden;
   background:linear-gradient(180deg,var(--modal-grad-a),var(--modal-grad-b));
