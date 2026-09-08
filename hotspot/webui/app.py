@@ -79,15 +79,16 @@ def main(argv: list | None = None) -> int:
     api.attach_window(window)
     api._tray = tray
 
-    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动、色键透明圆角） ----
+    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动） ----
     MINI_FILE = UI_DIR / "mini.html"
-    MINI_W, MINI_H = 192, 64
-    # 抗锯齿圆角方案（SetWindowRgn 是 1-bit 硬裁剪必有锯齿，已废弃）：
-    #   1. WebView2 DefaultBackgroundColor = alpha 0（页面圆角外像素不画）
-    #   2. Form TransparencyKey/BackColor = 色键（Form 表面整面抠成透明）
-    #   3. mini.html 圆角外透明 → 角落透出桌面，圆弧边缘保留 HTML 抗锯齿
-    # 色键取卡片描边邻近色，不能与卡片内任何颜色相同，否则被抠洞。
-    MINI_KEY_HEX = "#1e2d49"
+    MINI_W, MINI_H = 160, 64   # 110% DPI 下 160 逻辑px = 175 整数物理px，右缘无分数缝隙
+    # 圆角/点击实验结论（SendInput 真实鼠标矩阵测试 + v7 探针）：
+    #   - TransparencyKey（任何配置）→ layered hit-test 全窗口穿透（点击落到下层）
+    #   - SetWindowRgn 圆角裁剪 + alpha0 透明 html → 同样破坏子窗口鼠标消息
+    #   - 最终方案（v7 探针验证 CLICK YES）：html 铺不透明渐变 +
+    #     SetWindowRgn 圆角裁剪 → 圆角外直接透出桌面（真圆角），点击正常，
+    #     且拖拽走 Windows 原生 WM_NCLBUTTONDOWN/HTCAPTION（与主窗口顶栏同机制）
+    MINI_BG = {"dark": "#11151f", "light": "#ffffff"}
     mini_holder = {"win": None}
 
     def _find_webview2(ctrl):
@@ -103,43 +104,43 @@ def main(argv: list | None = None) -> int:
                 return hit
         return None
 
-    def _apply_colorkey(w, stage: str = "shown") -> None:
-        """色键透明。WebView2 COM 属性必须投递到 UI 线程设置（后台线程直接调
-        会抛 CoreWebView2Controller members can only be accessed from the UI thread）。
-        file:// 导航会重置 WebView2 底色 → shown 和 loaded 各设一次（loaded 晚于 shown）。"""
+    def _apply_mini_style(w, theme: str = "dark") -> None:
+        """WebView2 COM 属性必须投递到 UI 线程设置（后台线程直接调
+        会抛 CoreWebView2Controller members can only be accessed from the UI thread）。"""
 
         def work() -> None:
             try:
                 import System.Drawing as sd
                 from System import Action
 
-                key = sd.ColorTranslator.FromHtml(MINI_KEY_HEX)
+                bg_hex = MINI_BG.get(theme, MINI_BG["dark"])
                 alpha0 = sd.Color.FromArgb(0, 0, 0, 0)
                 form = w.native
 
                 def ui_work():
-                    form.TransparencyKey = key
-                    form.BackColor = key
+                    try:
+                        form.BackColor = sd.ColorTranslator.FromHtml(bg_hex)
+                    except Exception:
+                        pass
                     wb = _find_webview2(form)
                     if wb is not None:
                         try:
                             wb.DefaultBackgroundColor = alpha0
-                            if stage == "loaded":
-                                print("[mini] colorkey applied at loaded", flush=True)
                         except Exception:
                             log.debug("WebView2 底色透明设置失败", exc_info=True)
 
                 form.BeginInvoke(Action(ui_work))
             except Exception:
-                log.debug("色键透明失败", exc_info=True)
+                log.debug("浮窗样式设置失败", exc_info=True)
         import threading
         threading.Thread(target=work, daemon=True).start()
 
     def open_mini() -> None:
+        theme = getattr(api.cfg, "theme", "dark")
         if mini_holder["win"] is not None:
             try:
                 mini_holder["win"].show()
-                _apply_colorkey(mini_holder["win"])
+                _apply_mini_style(mini_holder["win"], theme)
                 return
             except Exception:
                 mini_holder["win"] = None
@@ -151,33 +152,22 @@ def main(argv: list | None = None) -> int:
                 width=MINI_W, height=MINI_H,
                 min_size=(MINI_W, MINI_H),  # 默认 (200,100) 会把小窗强制撑大
                 resizable=False,
-                frameless=True, easy_drag=True, on_top=True,
+                frameless=True,
+                easy_drag=False,  # 必须 False：pywebview 内置 easy_drag 的全局 mousedown
+                                  # 与自定义拖拽互相打架（吞点击、拖动错乱），拖拽全走 move_mini
+                on_top=True,
                 shadow=False,
                 hidden=False,
             )
 
             def _mini_shown() -> None:
-                _apply_colorkey(mw, "shown")
+                _apply_mini_style(mw, getattr(api.cfg, "theme", "dark"))
 
             def _mini_loaded() -> None:
-                # file:// 导航完成后 WebView2 会重置底色，必须补一刀
-                _apply_colorkey(mw, "loaded")
+                # file:// 导航完成后 WebView2 可能重置底色，补一刀
+                _apply_mini_style(mw, getattr(api.cfg, "theme", "dark"))
             mw.events.shown += _mini_shown
             mw.events.loaded += _mini_loaded
-            # 兜底：2s 后再补一次（loaded 可能早于我们订阅，或渲染树晚完成）
-            def _mini_late() -> None:
-                time.sleep(2.0)
-                try:
-                    _apply_colorkey(mw, "loaded")
-                except Exception:
-                    pass
-            def _mini_late() -> None:
-                time.sleep(2.0)
-                try:
-                    _apply_colorkey(mw, "loaded")
-                except Exception:
-                    pass
-            threading.Thread(target=_mini_late, daemon=True).start()
             mini_holder["win"] = mw
             api._mini_window = mw
             api._close_mini = close_mini
@@ -188,29 +178,25 @@ def main(argv: list | None = None) -> int:
         except Exception:
             log.exception("迷你浮窗创建失败")
 
-    def _move_mini_impl(dx: float, dy: float) -> None:
-        """增量移动浮窗：读物理位置 → SetWindowPos。JS 屏幕坐标=物理像素。"""
+    def _mini_drag_start_impl() -> None:
+        """原生窗口拖拽：ReleaseCapture + WM_NCLBUTTONDOWN(HTCAPTION)。
+        交还控制权给 Windows DefWindowProc 的移动循环，拖动轨迹与鼠标
+        完全一致（和主窗口顶栏拖拽同机制），无任何坐标换算偏差。"""
         w = mini_holder["win"]
         if w is None:
             return
         try:
             import ctypes
-            import ctypes.wintypes
 
             hwnd = int(w.native.Handle.ToInt64())
             user32 = ctypes.windll.user32
-            rect = ctypes.wintypes.RECT()
-            user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            # JS screenX/screenY 是物理像素；窗口物理位置 + 增量
-            user32.SetWindowPos(
-                hwnd, None,
-                int(rect.left + dx), int(rect.top + dy),
-                None, None, 0x0001 | 0x0004 | 0x0040,  # NOSIZE|NOZORDER|SHOWWINDOW
-            )
+            user32.ReleaseCapture()
+            user32.SendMessageW(hwnd, 0xA1, 2, 0)   # WM_NCLBUTTONDOWN, HTCAPTION
         except Exception:
-            log.debug("浮窗增量移动失败", exc_info=True)
+            log.debug("浮窗原生拖拽失败", exc_info=True)
 
-    api._app_ref = {"move_mini": _move_mini_impl}
+    api._app_ref = {"mini_drag_start": _mini_drag_start_impl}
+    api._mini_style = _apply_mini_style
 
     def close_mini() -> None:
         w = mini_holder["win"]
@@ -251,6 +237,13 @@ def main(argv: list | None = None) -> int:
     tray.start()        # 常驻启动；是否隐藏到托盘由 _on_closing 按配置判断
     log.info("界面已启动")
     webview.start(debug=args.debug)
+    # 兜底：无论从哪条路径退出（窗口 destroy / 托盘菜单退出 / 确认退出），
+    # webview.start 返回即主事件循环结束，托盘若还活着必须销毁，
+    # 否则 pystray daemon 线程虽死但 Explorer 托盘区图标残留。
+    try:
+        tray.stop()
+    except Exception:
+        pass
     return 0
 
 

@@ -533,6 +533,11 @@ class HotspotBackend:
             self._sync_portal(active)
         except Exception:
             log.debug("乐观门户同步异常", exc_info=True)
+        # 乐观状态直接刷托盘 tooltip（慢采集要 4~8 秒后才来，期间 tooltip 仍是旧状态）
+        try:
+            self._update_tray_tooltip(self.controller.last_status)
+        except Exception:
+            log.debug("乐观托盘刷新异常", exc_info=True)
 
     def start(self) -> Dict[str, Any]:
         return self._run("start", self.controller.start)
@@ -965,10 +970,16 @@ class HotspotBackend:
 
     # --------------------------- 迷你悬浮窗 --------------------------- #
     def set_theme(self, theme: str) -> Dict[str, Any]:
-        """主窗口切主题时同步到配置，浮窗等其它窗口读取跟随。"""
+        """主窗口切主题时同步到配置；浮窗 Form 底色跟随（色块与卡片融合）。"""
         if theme in ("dark", "light"):
             self.cfg.theme = theme
             self.cfg.save()
+            styler = getattr(self, "_mini_style", None)
+            if styler:
+                try:
+                    styler(self._mini_window, theme)
+                except Exception:
+                    log.debug("浮窗底色跟随主题失败", exc_info=True)
         return {"ok": True}
 
     def get_theme(self) -> str:
@@ -987,16 +998,16 @@ class HotspotBackend:
     def mini_toggle(self) -> Dict[str, Any]:
         return self.toggle()
 
-    def move_mini(self, dx: float, dy: float) -> Dict[str, Any]:
-        """迷你浮窗增量移动（JS 拖拽回调）。屏幕物理坐标，负值=左/上。"""
+    def mini_drag_start(self) -> Dict[str, Any]:
+        """迷你浮窗开始原生拖拽（JS mousedown 调一次，Windows 接管移动）。"""
         app_ref = getattr(self, "_app_ref", None)
         if not app_ref:
             return {"ok": False}
         try:
-            app_ref["move_mini"](float(dx), float(dy))
+            app_ref["mini_drag_start"]()
             return {"ok": True}
         except Exception:
-            log.debug("浮窗移动失败", exc_info=True)
+            log.debug("浮窗拖拽失败", exc_info=True)
             return {"ok": False}
 
     def mini_restore_main(self) -> Dict[str, Any]:
