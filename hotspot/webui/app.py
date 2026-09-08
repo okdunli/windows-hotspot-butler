@@ -50,6 +50,7 @@ def main(argv: list | None = None) -> int:
         return 3
 
     from .backend import HotspotBackend
+    from .tray import TrayIcon
 
     _dpi_aware()
     api = HotspotBackend()
@@ -67,10 +68,27 @@ def main(argv: list | None = None) -> int:
     )
     api.attach_window(window)
 
+    # ---- 托盘（close_to_tray 开启时：关闭窗口 = 隐藏到托盘） ----
+    tray = TrayIcon(
+        on_show=lambda: (window.show(), window.restore()),
+        on_exit=lambda: (tray.stop(), window.destroy()),
+    )
+
+    def _on_closing() -> bool:
+        """窗口关闭请求：close_to_tray 开启且托盘可用 → 隐藏窗口、常驻托盘。"""
+        if api.cfg.close_to_tray and tray.available:
+            window.hide()
+            tray.notify("已最小化到托盘，点击图标可恢复显示")
+            return False        # 阻止真正的关闭
+        return True
+
     def _on_closed() -> None:
         api.shutdown()
+        tray.stop()
 
+    window.events.closing += _on_closing
     window.events.closed += _on_closed
+    tray.start()        # 常驻启动；是否隐藏到托盘由 _on_closing 按配置判断
     log.info("界面已启动")
     webview.start(debug=args.debug)
     return 0

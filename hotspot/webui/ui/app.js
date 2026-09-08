@@ -315,6 +315,7 @@
     $("#cfgBackend").value = c.backend || "auto";
     $("#cfgAutoStart").checked = !!c.auto_start;
     $("#cfgStartWin").checked = !!c.start_with_windows;
+    $("#cfgCloseTray").checked = !!c.close_to_tray;
   }
 
   function fillPortal() {
@@ -432,6 +433,7 @@
         backend: $("#cfgBackend").value,
         auto_start: $("#cfgAutoStart").checked,
         start_with_windows: $("#cfgStartWin").checked,
+        close_to_tray: $("#cfgCloseTray").checked,
       }).then((r) => { toast(r.ok ? "设置已保存" : r.msg, r.ok ? "success" : "error"); if (r.ok) closeModal("settingsModal"); });
     });
     $("#btnApply").addEventListener("click", () => {

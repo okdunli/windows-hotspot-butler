@@ -13,6 +13,7 @@ import threading
 import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -388,6 +389,7 @@ class HotspotBackend:
                 "auto_start": self.cfg.hotspot.auto_start,
                 "max_clients": self.cfg.hotspot.max_clients,
                 "start_with_windows": self.cfg.start_with_windows,
+                "close_to_tray": self.cfg.close_to_tray,
                 "portal_enabled": self.cfg.portal.enabled,
                 "portal_dns": self.cfg.portal.dns_redirect,
                 "portal_template": self.cfg.portal.template,
@@ -412,6 +414,9 @@ class HotspotBackend:
         def wrapper() -> None:
             try:
                 ok, msg = fn()
+                if key in ("start", "stop") and ok:
+                    # 开关成功立即反映到界面，不等下一次慢采集（PowerShell 要 4~8 秒）
+                    self._optimistic_status(key == "start")
                 self._toast(str(msg), "success" if ok else "error")
             except Exception as exc:
                 log.exception("操作失败 %s", key)
@@ -425,6 +430,25 @@ class HotspotBackend:
             self._busy[key] = time.time()
         self._pool.submit(wrapper)
         return {"ok": True, "started": True}
+
+    def _optimistic_status(self, active: bool) -> None:
+        st = self.controller.last_status
+        self.controller.last_status = replace(st, active=active,
+                                              state="on" if active else "off")
+        if active:
+            self.controller.ever_active = True
+            if self.controller.wlan_caps is not None:
+                self.controller.wlan_caps.ever_active = True
+                self.controller.wlan_caps.active_now = True
+        self._status = self.controller.last_status
+        if active and not self.started_at:
+            self.started_at = time.time()
+        if not active:
+            self.started_at = 0.0
+        try:
+            self._sync_portal(active)
+        except Exception:
+            log.debug("乐观门户同步异常", exc_info=True)
 
     def start(self) -> Dict[str, Any]:
         return self._run("start", self.controller.start)
@@ -454,13 +478,21 @@ class HotspotBackend:
             if "start_with_windows" in patch:
                 self.cfg.start_with_windows = bool(patch["start_with_windows"])
                 self._apply_start_with_windows(bool(patch["start_with_windows"]))
+            if "close_to_tray" in patch:
+                self.cfg.close_to_tray = bool(patch["close_to_tray"])
             p = self.cfg.portal
-            for key in ("enabled", "dns_redirect"):
+            # 前端发的是 portal_* 前缀键，映射到 PortalConfig 字段
+            portal_map = {
+                "portal_enabled": ("enabled", bool),
+                "portal_dns": ("dns_redirect", bool),
+                "portal_template": ("template", str),
+                "portal_title": ("title", str),
+                "portal_notice": ("notice", str),
+                "portal_button": ("button", str),
+            }
+            for key, (attr, typ) in portal_map.items():
                 if key in patch:
-                    setattr(p, key, bool(patch[key]))
-            for key in ("template", "title", "notice", "button"):
-                if key in patch:
-                    setattr(p, key, str(patch[key]))
+                    setattr(p, attr, typ(patch[key]))
             self.cfg.normalize()
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
@@ -649,11 +681,15 @@ class HotspotBackend:
         return {"ok": True}
 
     def close(self) -> Dict[str, Any]:
-        if self._window:
-            try:
+        """标题栏 ✕：close_to_tray 开启时隐藏到托盘，否则真正关闭。"""
+        try:
+            if self.cfg.close_to_tray and self._window:
+                self._window.hide()
+                return {"ok": True, "hidden": True}
+            if self._window:
                 self._window.destroy()
-            except Exception:
-                pass
+        except Exception:
+            pass
         return {"ok": True}
 
     def pick_portal_file(self) -> Dict[str, Any]:

@@ -67,6 +67,7 @@ class AppConfig:
     demo_mode: bool = False
     sidebar_expanded: bool = True
     start_with_windows: bool = False
+    close_to_tray: bool = False     # 关闭窗口时最小化到托盘而非退出
     window_geometry: str = ""
     hotspot: HotspotConfig = field(default_factory=HotspotConfig)
     portal: PortalConfig = field(default_factory=PortalConfig)
