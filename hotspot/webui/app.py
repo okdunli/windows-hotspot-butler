@@ -84,10 +84,10 @@ def main(argv: list | None = None) -> int:
     MINI_W, MINI_H = 160, 64   # 110% DPI 下 160 逻辑px = 175 整数物理px，右缘无分数缝隙
     # 圆角/点击实验结论（SendInput 真实鼠标矩阵测试 + v7 探针）：
     #   - TransparencyKey（任何配置）→ layered hit-test 全窗口穿透（点击落到下层）
-    #   - SetWindowRgn 圆角裁剪 + alpha0 透明 html → 同样破坏子窗口鼠标消息
-    #   - 最终方案（v7 探针验证 CLICK YES）：html 铺不透明渐变 +
-    #     SetWindowRgn 圆角裁剪 → 圆角外直接透出桌面（真圆角），点击正常，
-    #     且拖拽走 Windows 原生 WM_NCLBUTTONDOWN/HTCAPTION（与主窗口顶栏同机制）
+    #   - SetWindowRgn 圆角裁剪 → 1-bit 硬裁剪有锯齿，且半径参数是椭圆直径易算错
+    #   - 最终方案：Win11 DWM 圆角（DWMWA_WINDOW_CORNER_PREFERENCE=DWMWCP_ROUND）
+    #     → DWM 合成器渲染，自带抗锯齿，系统固定 ~8px 半径；
+    #     Win10 无此 API 时回退 GDI Region（直径=2×半径），html radius 同步 8px
     MINI_BG = {"dark": "#11151f", "light": "#ffffff"}
     mini_holder = {"win": None}
 
@@ -119,15 +119,44 @@ def main(argv: list | None = None) -> int:
 
                 def ui_work():
                     try:
+                        import ctypes
+                        import ctypes.wintypes
+
                         form.BackColor = sd.ColorTranslator.FromHtml(bg_hex)
-                    except Exception:
-                        pass
-                    wb = _find_webview2(form)
-                    if wb is not None:
+                        wb = _find_webview2(form)
+                        if wb is not None:
+                            try:
+                                wb.DefaultBackgroundColor = alpha0
+                            except Exception:
+                                log.debug("WebView2 底色透明设置失败", exc_info=True)
+                        # 圆角：优先 Win11 DWM 圆角（抗锯齿）；Win10 该 API 返回
+                        # E_INVALIDARG → 回退 GDI Region。注意两点（v9 探针实证）：
+                        #   1. CreateRoundRectRgn 在 gdi32 不在 user32，r 参数是
+                        #      椭圆"直径"，真实角半径 = r/2 → 直径取 2×18×dpr
+                        #   2. Region + 透明 html 会杀死点击；mini.html 是不透明
+                        #      渐变，无此问题（v7/v9 对照）
+                        hwnd = int(form.Handle.ToInt64())
+                        user32 = ctypes.windll.user32
+                        gdi32 = ctypes.windll.gdi32
                         try:
-                            wb.DefaultBackgroundColor = alpha0
+                            dwm = ctypes.windll.dwmapi
+                            pref = ctypes.c_int(2)   # DWMWCP_ROUND
+                            if dwm.DwmSetWindowAttribute(
+                                    hwnd, 33, ctypes.byref(pref), 4) == 0:
+                                return               # DWM 圆角设置成功，不需要 Region
                         except Exception:
-                            log.debug("WebView2 底色透明设置失败", exc_info=True)
+                            pass
+                        # ---- Win10 回退路径：GDI Region ----
+                        dpr = user32.GetDpiForWindow(hwnd) / 96.0
+                        d = max(4, int(round(2 * 18 * dpr)))   # 直径 = 2×半径18px
+                        rect = ctypes.wintypes.RECT()
+                        if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                            wp, hp = rect.right - rect.left, rect.bottom - rect.top
+                            rgn = gdi32.CreateRoundRectRgn(0, 0, wp + 1, hp + 1, d, d)
+                            if rgn:
+                                user32.SetWindowRgn(hwnd, rgn, True)
+                    except Exception:
+                        log.debug("浮窗圆角设置失败", exc_info=True)
 
                 form.BeginInvoke(Action(ui_work))
             except Exception:
@@ -180,18 +209,27 @@ def main(argv: list | None = None) -> int:
 
     def _mini_drag_start_impl() -> None:
         """原生窗口拖拽：ReleaseCapture + WM_NCLBUTTONDOWN(HTCAPTION)。
-        交还控制权给 Windows DefWindowProc 的移动循环，拖动轨迹与鼠标
-        完全一致（和主窗口顶栏拖拽同机制），无任何坐标换算偏差。"""
+        v9 探针实证：js_api 后台线程直接 SendMessage 完全无效（delta 0,0），
+        必须 BeginInvoke 投递到 UI 线程（delta 200,100 精确跟手）——
+        NCLBUTTONDOWN 要在窗口所属线程同步进入 DefWindowProc 移动循环。"""
         w = mini_holder["win"]
         if w is None:
             return
         try:
             import ctypes
+            from System import Action
 
-            hwnd = int(w.native.Handle.ToInt64())
-            user32 = ctypes.windll.user32
-            user32.ReleaseCapture()
-            user32.SendMessageW(hwnd, 0xA1, 2, 0)   # WM_NCLBUTTONDOWN, HTCAPTION
+            form = w.native
+            hwnd = int(form.Handle.ToInt64())
+
+            def ui_drag():
+                try:
+                    ctypes.windll.user32.ReleaseCapture()
+                    ctypes.windll.user32.SendMessageW(hwnd, 0xA1, 2, 0)
+                except Exception:
+                    log.debug("浮窗原生拖拽执行失败", exc_info=True)
+
+            form.BeginInvoke(Action(ui_drag))
         except Exception:
             log.debug("浮窗原生拖拽失败", exc_info=True)
 
@@ -209,8 +247,16 @@ def main(argv: list | None = None) -> int:
     api._open_mini = open_mini
     api._close_mini = close_mini
 
+    _boot_ts = time.time()
+
     def _on_closing() -> bool:
         """窗口关闭请求：close_to_tray 开启且托盘可用 → 隐藏窗口、常驻托盘。"""
+        # 启动头 5 秒内的关闭请求一律忽略并留痕：曾出现过启动 ~9s 静默退出
+        # （无 Python 异常、无原生崩溃记录），疑似启动期状态未就绪时被意外
+        # close 信号穿透 _on_closing 放行。缓冲期 + 日志便于再发生时定位。
+        if time.time() - _boot_ts < 5.0:
+            log.warning("启动缓冲期内收到关闭请求，已忽略（防启动期闪退）")
+            return False
         if api.cfg.close_to_tray and tray.available:
             window.hide()
             tray.notify("已最小化到托盘，点击图标可恢复显示")
@@ -228,9 +274,11 @@ def main(argv: list | None = None) -> int:
         return True
 
     def _on_closed() -> None:
+        """主窗口真正销毁后：后端与托盘收尾。
+        注意：不关闭悬浮窗——用户点 btnMini 的 JS 链是 open_mini 后 hide 主窗，
+        悬浮窗必须继续存活（数据采集线程也保留）；真正退出走托盘菜单。"""
         api.shutdown()
         tray.stop()
-        close_mini()
 
     window.events.closing += _on_closing
     window.events.closed += _on_closed

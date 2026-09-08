@@ -1050,6 +1050,16 @@ class HotspotBackend:
                 pass
         return {"ok": True}
 
+    def hide_main(self) -> Dict[str, Any]:
+        """打开悬浮窗后藏起主窗口（不销毁：后端/托盘/采集线程全部保留）。
+        恢复走 mini_restore_main() → show()。"""
+        if self._window:
+            try:
+                self._window.hide()
+            except Exception:
+                pass
+        return {"ok": True}
+
     def close(self) -> Dict[str, Any]:
         """标题栏 ✕：close_to_tray 开启时隐藏到托盘，否则真正关闭。"""
         try:

@@ -17,14 +17,15 @@ html[data-theme="light"]{
   --green:#1a7f37;
 }*{box-sizing:border-box;margin:0;padding:0;user-select:none}
 /* 尺寸：160×64（与 app.py MINI_W/H 同步）。
-   圆角融合原理：html 与 .card 铺**完全相同**的渐变（同角度/色标/尺寸，逐像素重合），
-   .card 用 border-radius 裁圆角+描边，圆角外露出的 html 渐变与卡片该处颜色一致 →
-   视觉上圆角平滑、四角无色块。html 不透明不会毁 hit-test（v5 探针 CLICK YES）。 */
+   圆角对齐 Win11 DWM 圆角（系统 ~8px）：html 与 .card 铺**完全相同**的渐变
+   （同角度/色标/尺寸，逐像素重合），.card 用 border-radius:8px 裁圆角+描边，
+   圆角外露出的 html 渐变与卡片该处颜色一致 → DWM 再统一裁窗口圆角，
+   双层圆角重合=边缘平滑无锯齿。html 不透明不会毁 hit-test（v5 探针 CLICK YES）。 */
 html{width:160px;height:64px;overflow:hidden;
      background:linear-gradient(135deg,var(--bg1),var(--bg2))}
 body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
 .card{
-  width:100%;height:100%;border-radius:18px;
+  width:100%;height:100%;border-radius:8px;
   font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);
   background:linear-gradient(135deg,var(--bg1),var(--bg2));
   border:1px solid rgba(88,166,255,.28);

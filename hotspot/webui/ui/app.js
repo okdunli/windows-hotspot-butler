@@ -481,9 +481,11 @@
     // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
 
-    // 迷你悬浮窗
+    // 迷你悬浮窗：打开浮窗后把主窗口藏起来（绝不能 destroy——
+    // destroy 会触发后端 shutdown + 托盘退出，连带杀掉刚出生的浮窗=闪退）。
+    // "展开"按钮走 mini_restore_main() → show() 主窗口，链路闭环。
     $("#btnMini").addEventListener("click", () => {
-      api().open_mini().then(() => api().close());
+      api().open_mini().then(() => api().hide_main());
     });
 
     // 统计
