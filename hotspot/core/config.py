@@ -57,6 +57,9 @@ class PortalConfig:
     footer: str = "由 WiFi 热点管理器 提供服务"
     require_accept: bool = True
     auto_open_preview: bool = True
+    access_password: str = ""       # 门户访问密码（空=不需要密码）
+    schedule_start: int = 0         # 放行时段开始（小时，0-23），与结束相等=全天
+    schedule_end: int = 24          # 放行时段结束（小时， exclusive）
 
 
 @dataclass
@@ -68,6 +71,9 @@ class AppConfig:
     sidebar_expanded: bool = True
     start_with_windows: bool = False
     close_to_tray: bool = False     # 关闭窗口时最小化到托盘而非退出
+    confirm_exit_hotspot: bool = True   # 退出时热点仍开着 → 弹确认
+    temp_password: str = ""             # 临时密码（空=未启用）
+    temp_password_until: float = 0.0    # 临时密码到期时间戳
     window_geometry: str = ""
     hotspot: HotspotConfig = field(default_factory=HotspotConfig)
     portal: PortalConfig = field(default_factory=PortalConfig)

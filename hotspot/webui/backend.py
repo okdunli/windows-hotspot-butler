@@ -130,6 +130,11 @@ class HotspotBackend:
         self._tray = None      # TrayIcon 实例，由 app.py 注入
         self._stop_timer: Optional[threading.Timer] = None
         self._stop_deadline = 0.0
+        self._temp_timer: Optional[threading.Timer] = None
+        self._temp_deadline = 0.0
+        self._exit_confirmed = False
+        self._open_mini = None
+        self._close_mini = None
         # 标记门户是否由"热点随启随停"逻辑托管；用户手动启停后改为 False，避免被自动逻辑覆盖
         self._portal_auto = False
 
@@ -462,8 +467,13 @@ class HotspotBackend:
                 "portal_title": self.cfg.portal.title,
                 "portal_notice": self.cfg.portal.notice,
                 "portal_button": self.cfg.portal.button,
+                "portal_password": self.cfg.portal.access_password,
+                "portal_schedule_start": self.cfg.portal.schedule_start,
+                "portal_schedule_end": self.cfg.portal.schedule_end,
+                "confirm_exit_hotspot": self.cfg.confirm_exit_hotspot,
             },
             "portal": self.captive.status(),
+            "temp_password": self.temp_password_status(),
             "share": self.share.status(),
             "port_fwd": self.portfwd.list_rules(),
             "gateway": self.gateway,
@@ -554,6 +564,8 @@ class HotspotBackend:
                 self._apply_start_with_windows(bool(patch["start_with_windows"]))
             if "close_to_tray" in patch:
                 self.cfg.close_to_tray = bool(patch["close_to_tray"])
+            if "confirm_exit_hotspot" in patch:
+                self.cfg.confirm_exit_hotspot = bool(patch["confirm_exit_hotspot"])
             p = self.cfg.portal
             # 前端发的是 portal_* 前缀键，映射到 PortalConfig 字段
             portal_map = {
@@ -563,10 +575,15 @@ class HotspotBackend:
                 "portal_title": ("title", str),
                 "portal_notice": ("notice", str),
                 "portal_button": ("button", str),
+                "portal_password": ("access_password", str),
             }
             for key, (attr, typ) in portal_map.items():
                 if key in patch:
                     setattr(p, attr, typ(patch[key]))
+            if "portal_schedule_start" in patch:
+                p.schedule_start = max(0, min(23, int(patch["portal_schedule_start"] or 0)))
+            if "portal_schedule_end" in patch:
+                p.schedule_end = max(1, min(24, int(patch["portal_schedule_end"] or 24)))
             self.cfg.normalize()
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
@@ -766,7 +783,7 @@ class HotspotBackend:
 
             hs = self.controller.last_status
             ssid = hs.ssid or self.cfg.hotspot.ssid
-            passwd = "" if self.cfg.hotspot.security == "open" else (
+            passphrase = "" if self.cfg.hotspot.security == "open" else (
                 hs.passphrase or self.cfg.hotspot.passphrase)
             security = "nopass" if self.cfg.hotspot.security == "open" else "WPA"
             payload = f'WIFI:T:{security};S:{esc(ssid)};P:{esc(passphrase)};;'
@@ -827,6 +844,169 @@ class HotspotBackend:
         if not dl or dl < time.time():
             return {"remaining": 0}
         return {"remaining": int(dl - time.time())}
+
+    # --------------------------- 临时密码 ----------------------------- #
+    def temp_password_start(self, hours: float) -> Dict[str, Any]:
+        """生成临时密码并应用到热点，hours 小时后自动改回原密码。
+
+        酒店/咖啡馆场景：给访客一个临时密码，到期自动恢复，无需手动改。
+        """
+        import secrets
+        import string
+        alphabet = string.ascii_lowercase + string.digits
+        temp_pw = "".join(secrets.choice(alphabet) for _ in range(8))
+        saved_pw = self.controller.last_status.passphrase or self.cfg.hotspot.passphrase
+        with self._lock:
+            if self._temp_timer is not None:
+                self._temp_timer.cancel()
+                self._temp_timer = None
+        # 立即下发临时密码（走正常配置流程）
+        self.cfg.hotspot.passphrase = temp_pw
+        self.cfg.save()
+        self.controller.cfg = self.cfg.hotspot
+        self._pool.submit(self._apply_config)
+        if self.controller.last_status.active:
+            self._toast(f"临时密码已生效：{temp_pw}", "success")
+        else:
+            self._toast(f"临时密码已设置：{temp_pw}（热点开启后生效）", "info")
+        self._tray_notify(f"临时密码：{temp_pw}")
+
+        def restore() -> None:
+            self.cfg.hotspot.passphrase = saved_pw
+            self.cfg.temp_password = ""
+            self.cfg.temp_password_until = 0.0
+            self.cfg.save()
+            self.controller.cfg = self.cfg.hotspot
+            self._pool.submit(self._apply_config)
+            self._toast("临时密码已到期，已恢复原密码", "info")
+            self._tray_notify("临时密码已到期，热点密码已恢复")
+            with self._lock:
+                self._temp_timer = None
+                self._temp_deadline = 0.0
+
+        t = threading.Timer(hours * 3600, restore)
+        t.daemon = True
+        with self._lock:
+            self._temp_timer = t
+            self._temp_deadline = time.time() + hours * 3600
+        t.start()
+        self.cfg.temp_password = temp_pw
+        self.cfg.temp_password_until = self._temp_deadline
+        self.cfg.save()
+        return {"ok": True, "msg": f"临时密码 {temp_pw}，{hours:g} 小时后自动恢复", "password": temp_pw}
+
+    def temp_password_stop(self) -> Dict[str, Any]:
+        with self._lock:
+            if self._temp_timer is not None:
+                self._temp_timer.cancel()
+                self._temp_timer = None
+            self._temp_deadline = 0.0
+        if self.cfg.temp_password:
+            self.cfg.temp_password = ""
+            self.cfg.temp_password_until = 0.0
+            self.cfg.save()
+        return {"ok": True, "msg": "已取消临时密码（密码保持当前值不变）"}
+
+    def temp_password_status(self) -> Dict[str, Any]:
+        with self._lock:
+            dl = self._temp_deadline
+        active = bool(self.cfg.temp_password) and dl > time.time()
+        return {"active": active, "password": self.cfg.temp_password if active else "",
+                "remaining": int(dl - time.time()) if active else 0}
+
+    # --------------------------- 配置导入导出 -------------------------- #
+    def export_config(self) -> Dict[str, Any]:
+        """导出全部配置为 JSON（不含密码明文选项可选，这里全量导出便于完整恢复）。"""
+        try:
+            ensure_dirs()
+            export = {
+                "app": "WifiHotspotManager",
+                "version": 1,
+                "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "config": self.cfg.to_dict(),
+                "devices": self.store.all(),
+            }
+            export_file = DATA_DIR / f"export-{time.strftime('%Y%m%d-%H%M%S')}.json"
+            export_file.write_text(
+                json.dumps(export, ensure_ascii=False, indent=2), encoding="utf-8")
+            import os
+            os.startfile(str(DATA_DIR))  # noqa: S606
+            return {"ok": True, "msg": f"已导出到 {export_file}"}
+        except Exception as exc:
+            log.exception("配置导出失败")
+            return {"ok": False, "msg": str(exc)}
+
+    def import_config(self) -> Dict[str, Any]:
+        """弹出文件选择框选择此前导出的 JSON，恢复配置。"""
+        try:
+            if not self._window:
+                return {"ok": False, "msg": "窗口未就绪"}
+            import webview
+            result = self._window.create_file_dialog(
+                webview.OPEN_DIALOG, allow_multiple=False,
+                file_types=("JSON 文件 (*.json)",),
+            )
+            if not result or not len(result):
+                return {"ok": False, "msg": "未选择文件"}
+            path = Path(result[0])
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("app") != "WifiHotspotManager" or not isinstance(data.get("config"), dict):
+                return {"ok": False, "msg": "文件格式不正确（不是本程序导出的配置）"}
+            from ..core.config import AppConfig
+            self.cfg = AppConfig.from_dict(data["config"])
+            self.cfg.save()
+            self.controller.cfg = self.cfg.hotspot
+            self._pool.submit(self._apply_config)
+            self._toast("配置已导入并下发", "success")
+            return {"ok": True, "msg": "配置已导入"}
+        except Exception as exc:
+            log.exception("配置导入失败")
+            return {"ok": False, "msg": str(exc)}
+
+    # --------------------------- 迷你悬浮窗 --------------------------- #
+    def mini_state(self) -> Dict[str, Any]:
+        """迷你浮窗专用轻量状态（只读缓存，不触发任何采集）。"""
+        with self._lock:
+            snap = dict(self._snap)
+        st = self.controller.last_status
+        stats = snap.get("stats", {})
+        return {"active": bool(st.active), "online": stats.get("online", 0),
+                "down": stats.get("down", 0), "up": stats.get("up", 0)}
+
+    def mini_toggle(self) -> Dict[str, Any]:
+        return self.toggle()
+
+    def mini_restore_main(self) -> Dict[str, Any]:
+        """迷你浮窗右键：显示主窗口、关闭浮窗。"""
+        if self._window:
+            try:
+                self._window.show()
+                self._window.restore()
+            except Exception:
+                pass
+        self.close_mini()
+        return {"ok": True}
+
+    def open_mini(self) -> Dict[str, Any]:
+        """打开迷你悬浮窗（由 app.py 挂载的 _open_mini 回调完成）。"""
+        if hasattr(self, "_open_mini") and self._open_mini:
+            self._open_mini()
+            return {"ok": True}
+        return {"ok": False, "msg": "悬浮窗不可用"}
+
+    def close_mini(self) -> Dict[str, Any]:
+        if hasattr(self, "_close_mini") and self._close_mini:
+            self._close_mini()
+        return {"ok": True}
+
+    def confirm_exit(self) -> Dict[str, Any]:
+        """用户已在确认弹窗点了"确认退出"，下次 close 请求放行。"""
+        self._exit_confirmed = True
+        return {"ok": True}
+
+    def cancel_exit(self) -> Dict[str, Any]:
+        self._exit_confirmed = False
+        return {"ok": True}
 
     def minimize(self) -> Dict[str, Any]:
         if self._window:

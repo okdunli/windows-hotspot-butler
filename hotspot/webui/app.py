@@ -54,6 +54,7 @@ def main(argv: list | None = None) -> int:
 
     _dpi_aware()
     api = HotspotBackend()
+    api._exit_confirmed = False
 
     window = webview.create_window(
         title="WiFi 热点管理器",
@@ -74,17 +75,68 @@ def main(argv: list | None = None) -> int:
     api.attach_window(window)
     api._tray = tray
 
+    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动） ----
+    MINI_FILE = UI_DIR / "mini.html"
+    mini_holder = {"win": None}
+
+    def open_mini() -> None:
+        if mini_holder["win"] is not None:
+            try:
+                mini_holder["win"].show()
+                return
+            except Exception:
+                mini_holder["win"] = None
+        try:
+            mw = webview.create_window(
+                title="热点浮窗",
+                url=MINI_FILE.as_uri(),
+                js_api=api,
+                width=190, height=64, resizable=False,
+                frameless=True, easy_drag=True, on_top=True,
+                hidden=False, background_color="#11151f",
+            )
+            mini_holder["win"] = mw
+            api._close_mini = close_mini
+
+            def _mini_closed() -> None:
+                mini_holder["win"] = None
+            mw.events.closed += _mini_closed
+        except Exception:
+            log.exception("迷你浮窗创建失败")
+
+    def close_mini() -> None:
+        w = mini_holder["win"]
+        if w is not None:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+            mini_holder["win"] = None
+    api._open_mini = open_mini
+    api._close_mini = close_mini
+
     def _on_closing() -> bool:
         """窗口关闭请求：close_to_tray 开启且托盘可用 → 隐藏窗口、常驻托盘。"""
         if api.cfg.close_to_tray and tray.available:
             window.hide()
             tray.notify("已最小化到托盘，点击图标可恢复显示")
             return False        # 阻止真正的关闭
+        # 热点还开着 → 确认（浏览器原生 confirm 不适用于 frameless，用 JS 弹层由后端二次调用）
+        if api.cfg.confirm_exit_hotspot and api.controller.last_status.active \
+                and not api._exit_confirmed:
+            api._exit_confirmed = True   # 第二次点 ✕ 视为确认
+            try:
+                window.evaluate_js("window.__confirmExit && window.__confirmExit()")
+            except Exception:
+                pass
+            return False
+        close_mini()
         return True
 
     def _on_closed() -> None:
         api.shutdown()
         tray.stop()
+        close_mini()
 
     window.events.closing += _on_closing
     window.events.closed += _on_closed

@@ -331,6 +331,50 @@ class _CaptiveHandler(BaseHTTPRequestHandler):
         raw = tpl_path.read_text(encoding="utf-8", errors="replace")
         return render_template(raw, build_values(srv.cfg, srv.ctx)).encode("utf-8")
 
+    def _password_page(self, error: str = "") -> bytes:
+        """门户访问密码页（PortalConfig.access_password 非空时显示）。"""
+        err = f'<p class="err">{error}</p>' if error else ""
+        return (
+            "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>访问验证</title><style>"
+            "body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:"
+            "-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;"
+            "background:linear-gradient(150deg,#0b1026,#1b2350);color:#eaf0ff}"
+            ".card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);"
+            "border-radius:20px;padding:32px 28px;width:min(90vw,360px);text-align:center;"
+            "backdrop-filter:blur(14px)}"
+            "h1{font-size:19px;margin-bottom:8px}p{color:#9aa7d4;font-size:13px;margin-bottom:18px}"
+            "input{width:100%;padding:12px 14px;border-radius:11px;border:1px solid rgba(255,255,255,.2);"
+            "background:rgba(0,0,0,.25);color:#fff;font-size:15px;outline:none;margin-bottom:14px}"
+            "button{width:100%;padding:13px;border:0;border-radius:12px;cursor:pointer;font-size:15px;"
+            "font-weight:600;color:#fff;background:linear-gradient(135deg,#5b8cff,#7c5cff)}"
+            ".err{color:#ff8a80;font-size:12.5px;margin-top:10px}"
+            "</style></head><body><div class='card'>"
+            "<h1>🔒 访问验证</h1><p>本网络需要访问密码，请向网络所有者获取</p>"
+            "<form method='post' action='/verify'>"
+            "<input type='password' name='pw' placeholder='访问密码' autofocus required>"
+            "<button type='submit'>验证并继续</button></form>" + err +
+            "</div></body></html>"
+        ).encode("utf-8")
+
+    def _schedule_denied_page(self) -> bytes:
+        srv: "CaptiveServer" = self.server           # type: ignore[assignment]
+        s, e = srv.cfg.schedule_start, srv.cfg.schedule_end
+        return (
+            "<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>不在上网时段</title><style>"
+            "body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:"
+            "-apple-system,'Segoe UI','Microsoft YaHei',sans-serif;"
+            "background:linear-gradient(150deg,#0b1026,#1b2350);color:#eaf0ff;text-align:center}"
+            ".box{padding:40px}.emo{font-size:52px;margin-bottom:14px}"
+            "h1{font-size:20px;margin-bottom:10px}p{color:#9aa7d4;font-size:14px;line-height:1.8}"
+            "</style></head><body><div class='box'><div class='emo'>🌙</div>"
+            f"<h1>当前不在上网时段</h1><p>本网络开放时间：{s:02d}:00 - {e % 24:02d}:00<br>"
+            "请在开放时段内再连接。</p></div></body></html>"
+        ).encode("utf-8")
+
     def _success_page(self) -> bytes:
         srv: "CaptiveServer" = self.server           # type: ignore[assignment]
         gw = srv.ctx.get_gateway() or "192.168.137.1"
@@ -386,6 +430,14 @@ class _CaptiveHandler(BaseHTTPRequestHandler):
                 self._send(404, b"<h1>404</h1>")
             return
 
+        # 时段限制：不在开放时间内直接拒绝（未放行设备才走到这里）
+        if not srv.schedule_open():
+            self._send(200, self._schedule_denied_page())
+            return
+        # 门户访问密码：先验密码再看欢迎页
+        if srv.cfg.access_password and not srv.verified.has(ip=ip):
+            self._send(200, self._password_page())
+            return
         self._send(200, self._portal_page())
 
     def _mac_allowed(self, srv: "CaptiveServer", ip: str) -> bool:
@@ -398,6 +450,29 @@ class _CaptiveHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         srv: "CaptiveServer" = self.server           # type: ignore[assignment]
         path = urlparse(self.path).path
+        ip = self._ip
+        ua = str(self.headers.get("User-Agent") or "")
+
+        # 门户访问密码验证
+        if path == "/verify":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            body = self.rfile.read(length) if length else b""
+            pw = ""
+            for pair in body.decode("utf-8", "replace").split("&"):
+                if pair.startswith("pw="):
+                    from urllib.parse import unquote_plus
+                    pw = unquote_plus(pair[3:])
+                    break
+            if pw and pw == srv.cfg.access_password:
+                srv.verified.allow(ip)
+                self._send(200, self._portal_page())
+            else:
+                self._send(200, self._password_page("密码不正确，请重试"))
+            return
+
         if path not in ("/accept", "/__portal_accept"):
             self._send(404, b"<h1>404</h1>")
             return
@@ -407,13 +482,15 @@ class _CaptiveHandler(BaseHTTPRequestHandler):
                 self.rfile.read(length)
         except (ValueError, OSError):
             pass
-        ip = self._ip
-        ua = str(self.headers.get("User-Agent") or "")
         mac = ""
         try:
             mac = srv.ctx.mac_of_ip(ip) if ip else ""
         except Exception:
             mac = ""
+        # 时段限制：accept 也拒绝
+        if not srv.schedule_open():
+            self._send(200, self._schedule_denied_page())
+            return
         srv.allow.allow(ip, mac, ua)
         try:
             if srv.on_accept:
@@ -437,6 +514,17 @@ class CaptiveServer(ThreadingHTTPServer):
         self.allow = allow
         self.on_accept = on_accept
         self.template_name = template_name
+        self.verified = AllowList(path=DATA_DIR / "portal_verified.json")  # 已通过访问密码的 IP
+
+    def schedule_open(self) -> bool:
+        """当前是否在门户放行时段内（start==end 视为全天开放）。"""
+        s, e = int(self.cfg.schedule_start), int(self.cfg.schedule_end)
+        if s == e:
+            return True
+        h = time.localtime().tm_hour
+        if s < e:
+            return s <= h < e
+        return h >= s or h < e          # 跨午夜（如 22:00-7:00）
 
 
 # --------------------------------------------------------------------------- #
@@ -502,6 +590,9 @@ class CaptivePortal:
             "queries": (self._dns.query_count if self._dns else 0),
             "hijacked": (self._dns.hijack_count if self._dns else 0),
             "error": self.last_error,
+            "need_password": bool(self.cfg.access_password),
+            "schedule": f"{int(self.cfg.schedule_start):02d}:00-{int(self.cfg.schedule_end) % 24:02d}:00",
+            "schedule_open": (self._http.schedule_open() if self._http else True),
         }
 
     # ---- 控制 ----

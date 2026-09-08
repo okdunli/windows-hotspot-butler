@@ -18,6 +18,7 @@
     <button id="btnStats" class="icon-btn" title="统计">📊</button>
     <button id="btnTools" class="icon-btn" title="工具箱">🧰</button>
     <button id="btnPortal" class="icon-btn" title="强制门户">🌐</button>
+    <button id="btnMini" class="icon-btn" title="迷你悬浮窗">🪟</button>
     <button id="btnSettings" class="icon-btn" title="设置">⚙️</button>
     <button id="btnMin" class="icon-btn" title="最小化">─</button>
     <button id="btnClose" class="icon-btn danger" title="关闭">✕</button>
@@ -169,6 +170,36 @@
         <input id="cfgCloseTray" type="checkbox" class="switch">
         <span>关闭时最小化到托盘（需 pip install pystray pillow）</span>
       </label>
+      <label class="switch-row">
+        <input id="cfgConfirmExit" type="checkbox" class="switch">
+        <span>退出时热点仍在运行 → 提醒确认</span>
+      </label>
+      <div class="field-row">
+        <div class="field">
+          <label>⏳ 临时密码（访客专用，到期自动恢复原密码）</label>
+          <div class="field-row">
+            <select id="cfgTempHours" style="flex:1">
+              <option value="1">1 小时</option>
+              <option value="2">2 小时</option>
+              <option value="4">4 小时</option>
+              <option value="8">8 小时</option>
+              <option value="24">24 小时</option>
+            </select>
+            <button id="btnTempPw" class="btn primary">生成</button>
+            <button id="btnTempStop" class="btn ghost">取消</button>
+          </div>
+          <div id="tempPwHint" class="hint hidden"></div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>💾 配置备份</label>
+          <div class="modal-foot" style="justify-content:flex-start">
+            <button id="btnExport" class="btn ghost">导出配置</button>
+            <button id="btnImport" class="btn ghost">导入配置</button>
+          </div>
+        </div>
+      </div>
       <div class="field-row">
         <div class="field">
           <label>定时关闭热点（分钟，0=取消）</label>
@@ -228,6 +259,22 @@
       <div class="field">
         <label>须知</label>
         <textarea id="pfNotice" rows="3" placeholder="使用须知，每行一条"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>访问密码（空 = 不需要）</label>
+          <input id="pfPassword" type="text" placeholder="访客需输入此密码才能看到欢迎页">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>放行时段开始（小时）</label>
+          <select id="pfSchStart"></select>
+        </div>
+        <div class="field">
+          <label>放行时段结束（小时）</label>
+          <select id="pfSchEnd"></select>
+        </div>
       </div>
       <div id="pfStatus" class="hint"></div>
       <div class="modal-foot">
@@ -320,6 +367,19 @@
           <button id="btnPfAdd" class="btn primary">添加</button>
         </div>
         <div id="pfList" class="top-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="exitModal" class="modal hidden">
+  <div class="modal-card small">
+    <div class="modal-head"><h3>⚠️ 热点仍在运行</h3><button class="icon-btn" data-close="exitModal">✕</button></div>
+    <div class="modal-body" style="text-align:center">
+      <div class="hint" style="margin-bottom:14px">热点当前处于开启状态，退出软件后设备将无法上网。<br>确定要退出吗？</div>
+      <div class="modal-foot" style="justify-content:center">
+        <button id="btnExitCancel" class="btn ghost">返回</button>
+        <button id="btnExitOk" class="btn primary">确认退出</button>
       </div>
     </div>
   </div>

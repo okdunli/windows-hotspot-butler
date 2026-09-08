@@ -334,6 +334,17 @@
     $("#cfgAutoStart").checked = !!c.auto_start;
     $("#cfgStartWin").checked = !!c.start_with_windows;
     $("#cfgCloseTray").checked = !!c.close_to_tray;
+    $("#cfgConfirmExit").checked = c.confirm_exit_hotspot !== false;
+    // 临时密码状态
+    const tp = state.temp_password || {};
+    const hint = $("#tempPwHint");
+    if (tp.active) {
+      const m = Math.floor((tp.remaining || 0) / 60);
+      setText(hint, "生效中：" + tp.password + " · 剩余 " + m + " 分钟");
+      hint.classList.remove("hidden");
+    } else {
+      hint.classList.add("hidden");
+    }
   }
 
   function fillPortal() {
@@ -345,11 +356,29 @@
     $("#pfTitle").value = c.portal_title || "";
     $("#pfNotice").value = c.portal_notice || "";
     $("#pfButton").value = c.portal_button || "";
+    $("#pfPassword").value = c.portal_password || "";
+    fillScheduleSelects(c.portal_schedule_start, c.portal_schedule_end);
     let txt = "状态：" + (p.running ? "运行中" : "未启动");
+    if (p.need_password) txt += " · 需访问密码";
     if (p.running) txt += "\nDNS 劫持：" + (p.dns ? "生效中" : "未生效 — " + (p.dns_error || "未知原因"));
     if (p.running) txt += "\n已放行设备：" + (p.allowed || 0) + " 台　劫持查询：" + (p.hijacked || 0) + " 次";
+    if (p.running && p.schedule_open === false) txt += "\n当前不在放行时段（" + (p.schedule || "") + "），新设备暂无法通过门户";
     txt += "\n门户地址：" + (p.url || "");
     setText($("#pfStatus"), txt);
+  }
+
+  function fillScheduleSelects(sv, ev) {
+    const s = $("#pfSchStart"), e = $("#pfSchEnd");
+    if (!s.options.length) {
+      for (let h = 0; h <= 23; h++) {
+        const o1 = new Option(String(h).padStart(2, "0") + ":00", h);
+        const o2 = new Option(String(h).padStart(2, "0") + ":00", h === 23 ? 24 : h + 1);
+        s.add(o1); e.add(o2);
+      }
+      e.add(new Option("24:00（全天）", 24));
+    }
+    s.value = String(sv == null ? 0 : sv);
+    e.value = String(ev == null ? 24 : ev);
   }
 
   function renderStats(r) {
@@ -449,6 +478,11 @@
 
     // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
+
+    // 迷你悬浮窗
+    $("#btnMini").addEventListener("click", () => {
+      api().open_mini().then(() => api().close());
+    });
 
     // 统计
     $("#btnStats").addEventListener("click", () => {
@@ -575,6 +609,35 @@
       if (ev.key === "Enter") closePrompt(ev.target.value);
     });
 
+    // 退出确认（热点运行中点 ✕ → 后端触发 __confirmExit）
+    window.__confirmExit = () => openModal("exitModal");
+    $("#btnExitCancel").addEventListener("click", () => {
+      closeModal("exitModal");
+      api().cancel_exit();
+    });
+    $("#btnExitOk").addEventListener("click", () => {
+      closeModal("exitModal");
+      api().confirm_exit().then(() => api().close());
+    });
+
+    // 临时密码
+    $("#btnTempPw").addEventListener("click", () => {
+      const h = parseFloat($("#cfgTempHours").value) || 1;
+      api().temp_password_start(h).then((r) => {
+        toast(r.msg, r.ok ? "success" : "error");
+        if (r.ok) { setText($("#tempPwHint"), "生效中：" + r.password); $("#tempPwHint").classList.remove("hidden"); }
+      });
+    });
+    $("#btnTempStop").addEventListener("click", () =>
+      api().temp_password_stop().then((r) => {
+        toast(r.msg, "success");
+        $("#tempPwHint").classList.add("hidden");
+      }));
+
+    // 配置备份
+    $("#btnExport").addEventListener("click", () => api().export_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
+    $("#btnImport").addEventListener("click", () => api().import_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
+
     // 设置保存
     $("#btnSave").addEventListener("click", () => {
       api().save_config({
@@ -585,6 +648,7 @@
         auto_start: $("#cfgAutoStart").checked,
         start_with_windows: $("#cfgStartWin").checked,
         close_to_tray: $("#cfgCloseTray").checked,
+        confirm_exit_hotspot: $("#cfgConfirmExit").checked,
       }).then((r) => { toast(r.ok ? "设置已保存" : r.msg, r.ok ? "success" : "error"); if (r.ok) closeModal("settingsModal"); });
     });
     $("#btnApply").addEventListener("click", () => {
@@ -592,25 +656,22 @@
     });
 
     // 门户
+    const portalPatch = () => ({
+      portal_enabled: $("#pfEnabled").checked,
+      portal_dns: $("#pfDns").checked,
+      portal_template: $("#pfTemplate").value,
+      portal_title: $("#pfTitle").value,
+      portal_notice: $("#pfNotice").value,
+      portal_button: $("#pfButton").value,
+      portal_password: $("#pfPassword").value.trim(),
+      portal_schedule_start: parseInt($("#pfSchStart").value, 10) || 0,
+      portal_schedule_end: parseInt($("#pfSchEnd").value, 10) || 24,
+    });
     $("#btnPfSave").addEventListener("click", () => {
-      api().save_config({
-        portal_enabled: $("#pfEnabled").checked,
-        portal_dns: $("#pfDns").checked,
-        portal_template: $("#pfTemplate").value,
-        portal_title: $("#pfTitle").value,
-        portal_notice: $("#pfNotice").value,
-        portal_button: $("#pfButton").value,
-      }).then((r) => toast(r.ok ? "已保存" : r.msg, r.ok ? "success" : "error"));
+      api().save_config(portalPatch()).then((r) => toast(r.ok ? "已保存" : r.msg, r.ok ? "success" : "error"));
     });
     $("#btnPfStart").addEventListener("click", () => {
-      api().save_config({
-        portal_enabled: true,
-        portal_dns: $("#pfDns").checked,
-        portal_template: $("#pfTemplate").value,
-        portal_title: $("#pfTitle").value,
-        portal_notice: $("#pfNotice").value,
-        portal_button: $("#pfButton").value,
-      }).then(() => api().portal_start().then(() => toast("正在启动强制门户…", "info")));
+      api().save_config(portalPatch()).then(() => api().portal_start().then(() => toast("正在启动强制门户…", "info")));
     });
     $("#btnPfStop").addEventListener("click", () => {
       api().portal_stop().then(() => toast("已停止强制门户", "info"));
