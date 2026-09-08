@@ -93,7 +93,6 @@ class HotspotBackend:
         self.controller = HotspotController(self.cfg.hotspot)
         self.gateway = self._load_gateway() or "192.168.137.1"
         self._arp: Dict[str, str] = {}
-        # 慢采集的缓存：系统状态 / 原始客户端 / 网关缓存时间戳
         self._status = None
         self._raw: List[RawClient] = []
         self._slow_running = False
@@ -141,14 +140,11 @@ class HotspotBackend:
         threading.Thread(target=self._loop, name="whm-poll", daemon=True).start()
         threading.Thread(target=self._detect_caps, name="whm-caps", daemon=True).start()
 
-        # 按配置自动开启热点（与传统界面行为一致）
         if self.cfg.hotspot.auto_start and not self.controller.last_status.active:
             threading.Thread(target=lambda: self.controller.start(),
                              name="whm-autostart", daemon=True).start()
 
-    # ------------------------------------------------------------------ #
-    #                              窗口钩子                                #
-    # ------------------------------------------------------------------ #
+    # 窗口钩子
     def attach_window(self, window) -> None:
         self._window = window
 
@@ -175,9 +171,7 @@ class HotspotBackend:
         except Exception:
             pass
 
-    # ------------------------------------------------------------------ #
-    #                              toast                                  #
-    # ------------------------------------------------------------------ #
+    # toast
     def _toast(self, text: str, kind: str = "info") -> None:
         with self._lock:
             self._toasts.append({"text": text, "kind": kind, "ts": time.time()})
@@ -204,7 +198,7 @@ class HotspotBackend:
         self._toast(f"{ip} 已通过欢迎页并开始上网", "success")
 
     def _on_dns_query(self, ip: str, domain: str) -> None:
-        """DNS 劫持路径上的域名记录（URL 访问日志，竞品的 URL Logging 功能）。"""
+        """DNS 劫持域名记录（访问日志）。"""
         if not domain or domain.endswith((".arpa", ".lan", ".local", ".localdomain")):
             return
         try:
@@ -230,9 +224,7 @@ class HotspotBackend:
         except OSError:
             log.debug("网关缓存写入失败")
 
-    # ------------------------------------------------------------------ #
-    #                            采集循环                                  #
-    # ------------------------------------------------------------------ #
+    # 采集循环
     def _detect_caps(self) -> None:
         try:
             self._caps = self.controller.capabilities(refresh=True)
@@ -253,10 +245,7 @@ class HotspotBackend:
             self._stop.wait(_POLL_FAST)
 
     def _gather_slow(self, force: bool = False) -> None:
-        """慢采集：系统热点状态 + 客户端列表 + 网关（PowerShell，耗时数秒）。
-
-        单独线程执行，快采集（ARP）不受它阻塞，界面始终秒级刷新。
-        """
+        """慢采集：系统状态 + 客户端 + 网关（PowerShell 秒级），独立线程不阻塞快采集。"""
         if self._slow_running:
             return
         self._slow_running = True
@@ -345,7 +334,6 @@ class HotspotBackend:
             })
 
         online = sum(1 for d in clients if d.online)
-        # 新设备接入提醒：对比上一轮的在线 MAC 集合
         now_online = {d.mac for d in clients if d.online}
         with self._lock:
             prev_online = self._prev_online
@@ -371,12 +359,7 @@ class HotspotBackend:
         }
 
     def _sync_portal(self, active: bool) -> None:
-        """随热点状态同步强制门户：开启且配置了门户就拉起（DNS 劫持），关闭就收起。
-
-        这样连上热点后会真正弹出门户页（DNS 劫持把未同意设备的解析指向网关），
-        而不是"连上就能直接上网、欢迎页形同虚设"。用户手动启停门户时由 portal_start/
-        portal_stop 把 _portal_auto 置 False，这里就不再自动接管。
-        """
+        """随热点开关自动拉起/收起门户；用户手动启停过（_portal_auto=False）则不接管。"""
         want = bool(self.cfg.portal.enabled) and bool(active)
         if want and not self.captive.running:
             try:
@@ -398,9 +381,7 @@ class HotspotBackend:
             except Exception:
                 log.debug("门户自动停止异常", exc_info=True)
 
-    # ------------------------------------------------------------------ #
-    #                           对外：读状态                               #
-    # ------------------------------------------------------------------ #
+    # 对外：读状态
     def get_state(self) -> Dict[str, Any]:
         st = self.controller.last_status
         with self._lock:
@@ -480,9 +461,7 @@ class HotspotBackend:
             "icons": [{"key": k, "label": v} for k, v in ICON_CHOICES],
         }
 
-    # ------------------------------------------------------------------ #
-    #                           对外：操作                                 #
-    # ------------------------------------------------------------------ #
+    # 对外：操作
     def _run(self, key: str, fn: Callable[[], Any]) -> Dict[str, Any]:
         """把耗时操作丢进线程池，立即返回，前端通过 busy / toast 感知进度。"""
         with self._lock:
@@ -592,7 +571,6 @@ class HotspotBackend:
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
             self._toast("设置已保存", "success")
-            # 配置变更需要下发到系统
             self._pool.submit(self._apply_config)
             return {"ok": True, "msg": "已保存"}
         except Exception as exc:
@@ -625,7 +603,7 @@ class HotspotBackend:
         except Exception:
             log.debug("设置开机自启失败", exc_info=True)
 
-    # ------------------------------ 设备 ------------------------------ #
+    # 设备
     def set_device_name(self, mac: str, name: str) -> Dict[str, Any]:
         try:
             self.devman.rename(mac, name)
@@ -650,7 +628,7 @@ class HotspotBackend:
         except Exception as exc:
             return {"ok": False, "msg": str(exc)}
 
-    # --------------------------- 禁止上网 ----------------------------- #
+    # 禁止上网
     @staticmethod
     def _rule_name(mac: str, direction: str) -> str:
         return f"WHM-BLOCK-{normalize_mac(mac).replace(':', '')}-{direction}"
@@ -706,7 +684,7 @@ class HotspotBackend:
         self._pool.submit(self._gather_fast)
         return {"ok": True, "msg": "已恢复上网"}
 
-    # ---------------------------- 强制门户 ---------------------------- #
+    # 强制门户
     def portal_start(self) -> Dict[str, Any]:
         def work() -> Any:
             self.captive.ctx = self.ctx
@@ -736,7 +714,7 @@ class HotspotBackend:
         self._pool.submit(self._gather_fast)
         return {"ok": True, "msg": f"已取消放行 {dev.ip or dev.mac}"}
 
-    # ------------------------------ 其它 ------------------------------ #
+    # 其它
     def diagnose(self) -> Dict[str, Any]:
         def work() -> Any:
             try:
@@ -750,12 +728,9 @@ class HotspotBackend:
     def get_diagnose(self) -> Dict[str, Any]:
         return {"lines": list(self._diag)}
 
-    # --------------------------- WiFi 二维码 --------------------------- #
+    # WiFi 二维码
     def wifi_qrcode(self) -> Dict[str, Any]:
-        """生成 WiFi 扫码连接二维码（data:image/png;base64）。
-
-        标准 WIFI: 格式（Android/iOS 11+ 相机均支持），特殊字符按规范转义。
-        """
+        """生成 WiFi 扫码连接二维码（标准 WIFI: 格式）。"""
         try:
             import base64
             import io
@@ -786,7 +761,7 @@ class HotspotBackend:
             log.exception("二维码生成失败")
             return {"ok": False, "msg": str(exc)}
 
-    # --------------------------- 定时关闭 ----------------------------- #
+    # 定时关闭
     def schedule_stop(self, minutes: int) -> Dict[str, Any]:
         """N 分钟后自动关闭热点；minutes<=0 取消。"""
         with self._lock:
@@ -832,12 +807,9 @@ class HotspotBackend:
             return {"remaining": 0}
         return {"remaining": int(dl - time.time())}
 
-    # --------------------------- 临时密码 ----------------------------- #
+    # 临时密码
     def temp_password_start(self, hours: float) -> Dict[str, Any]:
-        """生成临时密码并应用到热点，hours 小时后自动改回原密码。
-
-        酒店/咖啡馆场景：给访客一个临时密码，到期自动恢复，无需手动改。
-        """
+        """生成临时密码，hours 小时后自动恢复原密码。"""
         import secrets
         import string
         alphabet = string.ascii_lowercase + string.digits
@@ -847,7 +819,6 @@ class HotspotBackend:
             if self._temp_timer is not None:
                 self._temp_timer.cancel()
                 self._temp_timer = None
-        # 立即下发临时密码（走正常配置流程）
         self.cfg.hotspot.passphrase = temp_pw
         self.cfg.save()
         self.controller.cfg = self.cfg.hotspot
@@ -901,9 +872,9 @@ class HotspotBackend:
         return {"active": active, "password": self.cfg.temp_password if active else "",
                 "remaining": int(dl - time.time()) if active else 0}
 
-    # --------------------------- 配置导入导出 -------------------------- #
+    # 配置导入导出
     def export_config(self) -> Dict[str, Any]:
-        """导出全部配置为 JSON（不含密码明文选项可选，这里全量导出便于完整恢复）。"""
+        """导出全部配置为 JSON。"""
         try:
             ensure_dirs()
             export = {
@@ -950,7 +921,7 @@ class HotspotBackend:
             log.exception("配置导入失败")
             return {"ok": False, "msg": str(exc)}
 
-    # --------------------------- 迷你悬浮窗 --------------------------- #
+    # 迷你悬浮窗
     def set_theme(self, theme: str) -> Dict[str, Any]:
         """主窗口切主题时同步到配置；浮窗 Form 底色跟随（色块与卡片融合）。"""
         if theme in ("dark", "light"):
@@ -1042,6 +1013,16 @@ class HotspotBackend:
                 pass
         return {"ok": True}
 
+    def boot_ready(self) -> Dict[str, Any]:
+        """主窗前端 boot() 上报 JS 就绪 → 触发启动期浮窗恢复（app.py 接应）。"""
+        fn = getattr(self, "_boot_ready", None)
+        if fn:
+            try:
+                fn()
+            except Exception:
+                log.debug("boot_ready 接应失败", exc_info=True)
+        return {"ok": True}
+
     def close(self) -> Dict[str, Any]:
         """标题栏 ✕：close_to_tray 开启时隐藏到托盘，否则真正关闭。"""
         try:
@@ -1054,9 +1035,9 @@ class HotspotBackend:
             pass
         return {"ok": True}
 
-    # --------------------------- 统计报表 ----------------------------- #
+    # 统计报表
     def get_stats_report(self) -> Dict[str, Any]:
-        """流量统计 + 用量 TOP + 域名访问记录（竞品 Statistics / URL Logging）。"""
+        """流量统计 + 用量 TOP + 域名访问记录。"""
         try:
             daily = self.db.daily_all(14)
             names: Dict[str, str] = {}
@@ -1085,7 +1066,7 @@ class HotspotBackend:
             log.exception("统计报表失败")
             return {"ok": False, "msg": str(exc)}
 
-    # --------------------------- 文件共享 ----------------------------- #
+    # 文件共享
     def share_start(self) -> Dict[str, Any]:
         def work():
             return self.share.start()
@@ -1105,7 +1086,7 @@ class HotspotBackend:
         except Exception as exc:
             return {"ok": False, "msg": str(exc)}
 
-    # --------------------------- 端口转发 ----------------------------- #
+    # 端口转发
     def pf_add(self, name: str, listen_port: int, connect_ip: str,
                connect_port: int, proto: str = "tcp") -> Dict[str, Any]:
         ok, msg = self.portfwd.add(name, listen_port, connect_ip, connect_port, proto)

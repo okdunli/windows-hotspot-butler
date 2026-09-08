@@ -2,11 +2,8 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<!-- 色键透明（app.py）：WebView2 底色=alpha 0 + Form TransparencyKey 抠色。
-     渐变只能画在 .card 子元素上（body 背景会传播到根 canvas 毁掉透明）。 -->
-<!-- 交互：左=WiFi 图标（点击开关热点），右=展开按钮（回主界面）。
-     拖拽：空白处 mousedown/mousemove → 后端 move_mini(dx,dy) 增量移动。
-     三态：off=灰图标无圈 / busy=旋转圈（开关进行中）/ on=静态绿圈包围。 -->
+<!-- 透明抠色：渐变只能画在 .card 上（body 背景会毁掉 WebView2 透明）。
+     交互：左图标=开关热点，右箭头=回主界面；三态 off/busy/on。 -->
 <style>
 :root{
   --text:#eaf0ff;--muted:#8b949e;--n:#58A6FF;--accent:#58A6FF;--bg1:#11151f;--bg2:#1c2336;
@@ -16,16 +13,14 @@ html[data-theme="light"]{
   --text:#1c2333;--muted:#5d6a7e;--n:#2f6fed;--accent:#2f6fed;--bg1:#ffffff;--bg2:#f0f4fa;
   --green:#1a7f37;
 }*{box-sizing:border-box;margin:0;padding:0;user-select:none}
-/* 尺寸：160×64（与 app.py MINI_W/H 同步）。
-   圆角对齐 Win11 DWM 圆角（系统 ~8px）：html 与 .card 铺**完全相同**的渐变
-   （同角度/色标/尺寸，逐像素重合），.card 用 border-radius:8px 裁圆角+描边，
-   圆角外露出的 html 渐变与卡片该处颜色一致 → DWM 再统一裁窗口圆角，
-   双层圆角重合=边缘平滑无锯齿。html 不透明不会毁 hit-test（v5 探针 CLICK YES）。 */
+/* 160×64，与 app.py MINI_W/H 同步。html 也铺同渐变（v7/v9：透明 html+Region
+   会杀死点击）——.card 10px 圆角外露的角缝由 html 渐变补色，无缝；
+   窗口 Region 11px（app.py）裁在边框线外 → 边框弧线完整 */
 html{width:160px;height:64px;overflow:hidden;
      background:linear-gradient(135deg,var(--bg1),var(--bg2))}
 body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
 .card{
-  width:100%;height:100%;border-radius:8px;
+  width:100%;height:100%;border-radius:13px;
   font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);
   background:linear-gradient(135deg,var(--bg1),var(--bg2));
   border:1px solid rgba(88,166,255,.28);
@@ -34,24 +29,19 @@ body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
 }
 html[data-theme="light"] .card{border-color:rgba(47,111,237,.35)}
 .card.on{border-color:rgba(63,185,80,.45)}
-/* ---- 左：开关按钮（点击切换；WiFi 图标在按钮内垂直居中） ----
-   视觉微调：只把 svg 上移 1.5px——WiFi 弧线在上、圆点在下，字形重心偏下；
-   按钮（含 hover 圈、ring）保持原位不动 */
+/* 左：开关按钮；svg 上移 1.5px 补偿字形重心偏下 */
 .sig{position:relative;width:36px;height:36px;flex:none;display:grid;place-items:center;
      border-radius:12px;cursor:pointer;transition:background .15s}
 .sig svg{transform:translateY(-1.5px)}
 .sig:hover{background:rgba(88,166,255,.12)}
-/* off：灰色图标；busy：主题色；on：绿色 */
 .sig svg{width:24px;height:24px;display:block;color:var(--muted);transition:color .25s}
 .card.busy .sig svg{color:var(--accent)}
 .card.on .sig svg{color:var(--green)}
-/* 圆圈：off 隐藏；busy 旋转（只显示上弧）；on 静态全圆 */
 .ring{position:absolute;inset:1px;border-radius:50%;border:2px solid transparent;pointer-events:none}
 .card.busy .ring{border-top-color:var(--accent);animation:spin 1s linear infinite}
 .card.on .ring{border-color:var(--green)}
 .card:not(.on):not(.busy) .ring{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* ---- 中：信息两行 ---- */
 .info{flex:1;min-width:0;line-height:1.3}
 .row1{display:flex;align-items:baseline;gap:3px}
 .n{font-size:14px;font-weight:700;color:var(--n)}
@@ -62,11 +52,10 @@ html[data-theme="light"] .card{border-color:rgba(47,111,237,.35)}
 .up b{color:#d29922}
 html[data-theme="light"] .down b{color:#1a7f37}
 html[data-theme="light"] .up b{color:#9a6700}
-/* 热点未开启：数值全部灰色（label 本来就是灰的） */
+/* 热点未开启：数值全灰 */
 .card:not(.on):not(.busy) .down b,
 .card:not(.on):not(.busy) .up b,
 .card:not(.on):not(.busy) .n{color:var(--muted)}
-/* ---- 右：展开按钮 ---- */
 .exp{width:22px;height:22px;flex:none;border-radius:7px;display:grid;place-items:center;
      cursor:pointer;color:var(--muted);transition:background .15s,color .15s}
 .exp:hover{background:rgba(88,166,255,.12);color:var(--accent)}

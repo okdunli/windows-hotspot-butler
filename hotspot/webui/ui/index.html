@@ -27,7 +27,6 @@
 
 <main class="layout">
 
-  <!-- ================= 左侧：开关与状态 ================= -->
   <section class="panel left">
     <div class="dial-wrap">
       <div id="dial" class="dial">
@@ -95,7 +94,6 @@
     <div id="warnBanner" class="banner hidden"></div>
   </section>
 
-  <!-- ================= 右侧：设备列表 ================= -->
   <section class="panel right">
     <div class="right-head">
       <h2>设备 <span id="devCount" class="chip">0</span></h2>
@@ -176,7 +174,7 @@
       </label>
       <div class="field-row">
         <div class="field">
-          <label>⏳ 临时密码（到期自动恢复原密码）</label>
+          <label>临时密码（到期自动恢复原密码）</label>
           <div class="field-row">
             <select id="cfgTempHours" style="flex:1">
               <option value="1">1 小时</option>
@@ -193,7 +191,7 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>💾 配置备份</label>
+          <label>配置备份</label>
           <div class="modal-foot" style="justify-content:flex-start">
             <button id="btnExport" class="btn ghost">导出配置</button>
             <button id="btnImport" class="btn ghost">导入配置</button>
@@ -307,7 +305,6 @@
   </div>
 </div>
 
-<!-- WiFi 二维码 -->
 <div id="qrModal" class="modal hidden">
   <div class="modal-card small">
     <div class="modal-head"><h3>🔗 扫码连接</h3><button class="icon-btn" data-close="qrModal">✕</button></div>
@@ -348,7 +345,7 @@
     <div class="modal-head"><h3>🧰 工具箱</h3><button class="icon-btn" data-close="toolsModal">✕</button></div>
     <div class="modal-body">
       <div class="field">
-        <label>📤 文件共享（手机浏览器直接互传文件）</label>
+        <label>文件共享（手机浏览器直接互传文件）</label>
         <div class="hint" id="shareStatus">未启动</div>
         <div class="modal-foot" style="justify-content:flex-start">
           <button id="btnShareStart" class="btn primary">启动</button>
@@ -357,7 +354,7 @@
         </div>
       </div>
       <div class="field">
-        <label>🎮 端口转发（TCP）</label>
+        <label>端口转发（TCP）</label>
         <div class="field-row">
           <input id="pfName" type="text" placeholder="名称" style="max-width:110px">
           <input id="pfLPort" type="number" placeholder="本机端口" style="max-width:100px">

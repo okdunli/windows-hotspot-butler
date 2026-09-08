@@ -61,8 +61,7 @@
     const btn = $("#btnTheme");
     if (btn) btn.textContent = t === "light" ? "☀️" : "🌙";
     try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
-    // 同步到后端配置，迷你悬浮窗等其它窗口跟随
-    try { window.pywebview && window.pywebview.api.set_theme(t); } catch (e) { /* 忽略 */ }
+      try { window.pywebview && window.pywebview.api.set_theme(t); } catch (e) { /* 忽略 */ }
   }
   function initTheme() {
     let saved = null;
@@ -110,8 +109,7 @@
     state = st;
     busy = !!st.busy;
 
-    // --- 圆盘 ---
-    const dial = $("#dial");
+      const dial = $("#dial");
     const hs = st.hotspot || {};
     setClass(dial, "on", hs.active && !busy);
     setClass(dial, "busy", busy);
@@ -119,8 +117,7 @@
     setText($("#dialText"), busy ? "处理中…" : (hs.active ? "点击关闭" : "点击开启"));
     setText($("#dialSub"), hs.active ? (hs.ssid || "已开启") : "未运行");
 
-    // --- 状态行 ---
-    const pill = $("#statusPill");
+      const pill = $("#statusPill");
     pill.className = "pill " + (busy ? "busy" : (hs.active ? "on" : ""));
     pill.innerHTML = hs.active
       ? '<span class="pulse"></span>' + (busy ? "切换中…" : "运行中") + (hs.uptime ? " · " + hs.uptime : "")
@@ -128,7 +125,6 @@
     setText($("#uptimeText"), hs.max_clients ? "上限 " + hs.max_clients + " 台" : "");
     setText($("#backendText"), hs.backend_label || "");
 
-    // 定时关闭倒计时（显示在状态行）
     const remain = (st.auto_stop || {}).remaining || 0;
     const stopEl = $("#autoStopText");
     if (remain > 0) {
@@ -139,24 +135,20 @@
       stopEl.classList.add("hidden");
     }
 
-    // --- 凭据 ---
-    setText($("#ssidText"), hs.ssid || "—");
+      setText($("#ssidText"), hs.ssid || "—");
     setText($("#passText"), passShown ? (hs.passphrase || "") : "••••••••");
     $("#passText").classList.toggle("mono", true);
 
-    // --- 统计 ---
-    const s = st.stats || {};
+      const s = st.stats || {};
     setTextFlash($("#statOnline"), s.online || 0, "flash");
     setTextFlash($("#statDown"), s.down_text || "0 B/s", "flash");
     setTextFlash($("#statUp"), s.up_text || "0 B/s", "flash");
 
-    // --- 管理员 ---
-    const badge = $("#adminBadge");
+      const badge = $("#adminBadge");
     badge.className = "badge " + (st.admin ? "ok" : "warn");
     setText(badge, st.admin ? "管理员" : "非管理员");
 
-    // --- 硬件能力（只在真的开不了时提示）---
-    const warn = $("#warnBanner");
+      const warn = $("#warnBanner");
     const caps = st.caps || {};
     if (!caps.can_host && !hs.active) {
       setText(warn, caps.block_reason || "本机未检测到可用的热点能力");
@@ -165,15 +157,13 @@
       warn.classList.add("hidden");
     }
 
-    // --- 门户 ---
-    const p = st.portal || {};
+      const p = st.portal || {};
     const chip = $("#portalChip");
     chip.classList.toggle("hidden", !p.running);
     chip.classList.toggle("on", !!p.running && !!p.dns);
     setText(chip, p.running ? (p.dns ? "门户 · 劫持中" : "门户 · 仅手动") : "门户 未启动");
 
-    // --- 设备 ---
-    renderDevices(st.devices || []);
+      renderDevices(st.devices || []);
     const cnt = $("#devCount");
     const n = (st.devices || []).filter((d) => d.online).length;
     if (cnt.textContent !== String(n)) {
@@ -183,8 +173,7 @@
       cnt.classList.add("bump");
     }
 
-    // --- toast（后端产生）---
-    (st.toasts || []).forEach((t) => toast(t.text, t.kind));
+      (st.toasts || []).forEach((t) => toast(t.text, t.kind));
   }
 
   function createDev(d) {
@@ -273,7 +262,6 @@
     $("#menuBlock").textContent = dev.blocked ? "✅ 恢复上网" : "🚫 禁止上网";
     $("#menuPortal").textContent = dev.allowed ? "⛔ 取消放行" : "🌐 放行门户";
 
-    // emoji 选择行
     const row = $("#emojiRow");
     row.innerHTML = "";
     (state.icons || []).forEach((ic) => {
@@ -337,7 +325,6 @@
     $("#cfgStartWin").checked = !!c.start_with_windows;
     $("#cfgCloseTray").checked = !!c.close_to_tray;
     $("#cfgConfirmExit").checked = c.confirm_exit_hotspot !== false;
-    // 临时密码状态
     const tp = state.temp_password || {};
     const hint = $("#tempPwHint");
     if (tp.active) {
@@ -388,31 +375,29 @@
     setText($("#stTotal"), (r.grand && r.grand.total) || "0 B");
     setText($("#stRx"), (r.grand && r.grand.rx) || "0 B");
     setText($("#stTx"), (r.grand && r.grand.tx) || "0 B");
-    // 每日流量条形图（纯 CSS，无依赖）
     const box = $("#statDaily");
     const daily = r.daily || [];
     const maxV = Math.max(1, ...daily.map((d) => d.rx + d.tx));
     box.innerHTML = "";
     daily.forEach((d) => {
-      const row = document.createElement("div");
-      row.className = "bar-row";
+      const col = document.createElement("div");
+      col.className = "bar-col";
       const total = d.rx + d.tx;
-      const label = document.createElement("span");
-      label.className = "bar-day";
-      label.textContent = d.day.slice(5);
+      const val = document.createElement("span");
+      val.className = "bar-val";
+      val.textContent = total > 0 ? d.total_text : "";
       const track = document.createElement("div");
       track.className = "bar-track";
       const bar = document.createElement("div");
       bar.className = "bar-fill";
-      bar.style.width = (total / maxV * 100).toFixed(1) + "%";
+      bar.style.height = (total / maxV * 100).toFixed(1) + "%";
       track.appendChild(bar);
-      const val = document.createElement("span");
-      val.className = "bar-val";
-      val.textContent = total > 0 ? d.total_text : "";
-      row.appendChild(label); row.appendChild(track); row.appendChild(val);
-      box.appendChild(row);
+      const label = document.createElement("span");
+      label.className = "bar-day";
+      label.textContent = d.day.slice(5);
+      col.appendChild(val); col.appendChild(track); col.appendChild(label);
+      box.appendChild(col);
     });
-    // TOP 设备
     const top = $("#statTop");
     top.innerHTML = "";
     (r.top || []).forEach((t, i) => {
@@ -425,7 +410,6 @@
       top.appendChild(el);
     });
     if (!(r.top || []).length) top.innerHTML = '<div class="hint">暂无数据</div>';
-    // 域名排行
     const dom = $("#statDomains");
     dom.innerHTML = "";
     (r.top_domains || []).forEach((d) => {
@@ -437,7 +421,6 @@
       dom.appendChild(el);
     });
     if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">暂无记录（需开启强制门户的 DNS 劫持）</div>';
-    // 最近访问
     const q = $("#statQueries");
     q.innerHTML = "";
     (r.queries || []).slice(0, 40).forEach((it) => {
@@ -457,7 +440,6 @@
     const s = st.share || {};
     setText($("#shareStatus"),
       s.running ? ("运行中 · " + (s.url || "")) : "未启动");
-    // 端口转发列表
     const list = $("#pfList");
     list.innerHTML = "";
     (st.port_fwd || []).forEach((r) => {
@@ -474,27 +456,21 @@
   }
 
   function bind() {
-    // 窗口
     $("#btnMin").addEventListener("click", () => api().minimize());
     $("#btnClose").addEventListener("click", () => api().close());
 
-    // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
 
-    // 迷你悬浮窗：打开浮窗后把主窗口藏起来（绝不能 destroy——
-    // destroy 会触发后端 shutdown + 托盘退出，连带杀掉刚出生的浮窗=闪退）。
-    // "展开"按钮走 mini_restore_main() → show() 主窗口，链路闭环。
+    // 藏主窗而非 destroy：destroy 会连带 shutdown 杀掉浮窗
     $("#btnMini").addEventListener("click", () => {
       api().open_mini().then(() => api().hide_main());
     });
 
-    // 统计
     $("#btnStats").addEventListener("click", () => {
       openModal("statsModal");
       api().get_stats_report().then(renderStats);
     });
 
-    // 工具箱
     $("#btnTools").addEventListener("click", () => { fillTools(); openModal("toolsModal"); });
     $("#btnShareStart").addEventListener("click", () =>
       api().share_start().then(() => setTimeout(fillTools, 600)));
@@ -513,7 +489,6 @@
       });
     });
 
-    // WiFi 二维码
     $("#btnQr").addEventListener("click", () => {
       api().wifi_qrcode().then((r) => {
         if (r.ok) {
@@ -525,12 +500,10 @@
       });
     });
 
-    // 定时关闭
     $("#btnAutoStop").addEventListener("click", () => {
       const m = parseInt($("#cfgAutoStop").value, 10) || 0;
       api().schedule_stop(m).then((r) => toast(r.msg, r.ok ? "success" : "error"));
     });
-    // 圆盘
     $("#dial").addEventListener("click", (ev) => {
       if (busy) return;
       const dial = $("#dial");
@@ -545,7 +518,6 @@
       api().toggle();
     });
 
-    // 凭据
     $("#copySsid").addEventListener("click", () => copy((state.hotspot || {}).ssid || ""));
     $("#copyPass").addEventListener("click", () => copy((state.hotspot || {}).passphrase || ""));
     $("#togglePass").addEventListener("click", () => {
@@ -553,7 +525,6 @@
       setText($("#passText"), passShown ? ((state.hotspot || {}).passphrase || "") : "••••••••");
     });
 
-    // 顶栏 / 底部按钮
     $("#btnRefresh").addEventListener("click", () => api().refresh());
     $("#btnSettings").addEventListener("click", () => { fillSettings(); openModal("settingsModal"); });
     $("#btnPortal").addEventListener("click", () => { fillPortal(); openModal("portalModal"); });
@@ -567,7 +538,6 @@
       });
     });
 
-    // 模态关闭
     $$("[data-close]").forEach((b) => b.addEventListener("click", () => closeModal(b.dataset.close)));
     $$(".modal").forEach((m) => m.addEventListener("mousedown", (ev) => {
       if (ev.target === m) closeModal(m.id);
@@ -582,7 +552,6 @@
       }
     });
 
-    // 菜单动作
     $$("#devMenu .menu-item").forEach((b) => b.addEventListener("click", () => {
       const act = b.dataset.act;
       const mac = menuMac;
@@ -606,14 +575,12 @@
       }
     }));
 
-    // 输入弹窗
     $("#promptOk").addEventListener("click", () => closePrompt($("#promptInput").value));
     $("#promptCancel").addEventListener("click", () => closePrompt(null));
     $("#promptInput").addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") closePrompt(ev.target.value);
     });
 
-    // 退出确认（热点运行中点 ✕ → 后端触发 __confirmExit）
     window.__confirmExit = () => openModal("exitModal");
     $("#btnExitCancel").addEventListener("click", () => {
       closeModal("exitModal");
@@ -624,7 +591,6 @@
       api().confirm_exit().then(() => api().close());
     });
 
-    // 临时密码
     $("#btnTempPw").addEventListener("click", () => {
       const h = parseFloat($("#cfgTempHours").value) || 1;
       api().temp_password_start(h).then((r) => {
@@ -638,11 +604,9 @@
         $("#tempPwHint").classList.add("hidden");
       }));
 
-    // 配置备份
     $("#btnExport").addEventListener("click", () => api().export_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
     $("#btnImport").addEventListener("click", () => api().import_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
 
-    // 设置保存
     $("#btnSave").addEventListener("click", () => {
       api().save_config({
         ssid: $("#cfgSsid").value,
@@ -659,7 +623,6 @@
       api().apply_now().then(() => toast("正在下发配置…", "info"));
     });
 
-    // 门户
     const portalPatch = () => ({
       portal_enabled: $("#pfEnabled").checked,
       portal_dns: $("#pfDns").checked,
@@ -696,6 +659,7 @@
     initTheme();
     bind();
     tick();
+    try { window.pywebview.api.boot_ready(); } catch (e) {}   // 上报就绪：后端据此恢复浮窗
   }
 
   if (window.pywebview && window.pywebview.api) boot();

@@ -71,7 +71,13 @@ def main(argv: list | None = None) -> int:
         easy_drag=True,
         background_color="#0b0e14",
     )
-    # ---- 托盘（close_to_tray 开启时：关闭窗口 = 隐藏到托盘） ----
+    # 上次退出时悬浮窗开着 → 主窗 JS 就绪（前端调 boot_ready）后开浮窗、藏主窗。
+    # 坑（探针实证）：
+    #   1. 不能用 create_window(hidden=True)：pywebview 实现是 Opacity=0+Show+Hide，
+    #      WebView2 控制器在隐藏窗口上初始化直接 E_ABORT，主窗全黑。
+    #   2. 主窗 WebView2 初始化完成前并发开第二个控制器会 E_ABORT（浮窗黑屏）；
+    #      loaded 事件与 evaluate_js 轮询均不可靠，故由前端 boot() 显式上报就绪。
+    api._boot_mini_pending = bool(api.cfg.mini_window.get("show"))
     tray = TrayIcon(
         on_show=lambda: (window.show(), window.restore()),
         on_exit=lambda: (tray.stop(), window.destroy()),
@@ -79,15 +85,8 @@ def main(argv: list | None = None) -> int:
     api.attach_window(window)
     api._tray = tray
 
-    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动） ----
     MINI_FILE = UI_DIR / "mini.html"
     MINI_W, MINI_H = 160, 64   # 110% DPI 下 160 逻辑px = 175 整数物理px，右缘无分数缝隙
-    # 圆角/点击实验结论（SendInput 真实鼠标矩阵测试 + v7 探针）：
-    #   - TransparencyKey（任何配置）→ layered hit-test 全窗口穿透（点击落到下层）
-    #   - SetWindowRgn 圆角裁剪 → 1-bit 硬裁剪有锯齿，且半径参数是椭圆直径易算错
-    #   - 最终方案：Win11 DWM 圆角（DWMWA_WINDOW_CORNER_PREFERENCE=DWMWCP_ROUND）
-    #     → DWM 合成器渲染，自带抗锯齿，系统固定 ~8px 半径；
-    #     Win10 无此 API 时回退 GDI Region（直径=2×半径），html radius 同步 8px
     MINI_BG = {"dark": "#11151f", "light": "#ffffff"}
     mini_holder = {"win": None}
     cfg = api.cfg      # 浮窗位置记忆读写用（_save_mini_pos / open_mini）
@@ -131,20 +130,23 @@ def main(argv: list | None = None) -> int:
                             except Exception:
                                 log.debug("WebView2 底色透明设置失败", exc_info=True)
                         # 圆角：优先 Win11 DWM 圆角（抗锯齿）；Win10 该 API 返回
-                        # E_INVALIDARG → 回退 GDI Region。注意两点（v9 探针实证）：
+                        # E_INVALIDARG → 回退 GDI Region。注意两点：
                         #   1. CreateRoundRectRgn 在 gdi32 不在 user32，r 参数是
-                        #      椭圆"直径"，真实角半径 = r/2 → 直径取 2×8×dpr
-                        #   2. Region + 透明 html 会杀死点击；mini.html 是不透明
-                        #      渐变，无此问题（v7/v9 对照）
+                        #      椭圆"直径"，真实角半径 = r/2 → 直径取 2×10×dpr
+                        #   2. Region 是 1-bit 硬裁剪，半径必须比 html 圆角大
+                        #      2px（裁在线外），否则抗锯齿边框弧线被啃掉
                         user32 = ctypes.windll.user32
                         gdi32 = ctypes.windll.gdi32
-                        # 浮窗不进任务栏。注意：运行时改 ShowInTaskbar 会重建
-                        # 窗口句柄 → hwnd 必须在此之后重新读取（下方重新取）
+                        hwnd = int(form.Handle.ToInt64())
+                        # 浮窗不进任务栏：加 WS_EX_TOOLWINDOW 扩展样式。
+                        # 不能用 form.ShowInTaskbar=False——运行时改会重建窗口句柄，
+                        # 把正在进行的 WebView2 控制器初始化连根拔掉（E_ABORT 黑屏）。
                         try:
-                            form.ShowInTaskbar = False
+                            GWL_EXSTYLE, WS_EX_TOOLWINDOW = -20, 0x80
+                            ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW)
                         except Exception:
                             pass
-                        hwnd = int(form.Handle.ToInt64())
                         try:
                             dwm = ctypes.windll.dwmapi
                             pref = ctypes.c_int(2)   # DWMWCP_ROUND
@@ -153,9 +155,8 @@ def main(argv: list | None = None) -> int:
                                 return               # DWM 圆角设置成功，不需要 Region
                         except Exception:
                             pass
-                        # ---- Win10 回退路径：GDI Region ----
                         dpr = user32.GetDpiForWindow(hwnd) / 96.0
-                        d = max(4, int(round(2 * 8 * dpr)))   # 直径 = 2×半径8px，对齐 html border-radius:8px
+                        d = max(4, int(round(2 * 11 * dpr)))   # 半径11px，比 html 的 10px 大 1px → 裁不到边框
                         rect = ctypes.wintypes.RECT()
                         if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
                             wp, hp = rect.right - rect.left, rect.bottom - rect.top
@@ -172,7 +173,8 @@ def main(argv: list | None = None) -> int:
         threading.Thread(target=work, daemon=True).start()
 
     def _save_mini_pos() -> None:
-        """记录悬浮窗当前位置到配置（物理像素）。位置获取失败则保留旧值。"""
+        """记录悬浮窗当前位置到配置。坐标统一存物理像素（GetWindowRect 原样），
+        逻辑↔物理换算只在 open_mini 读取时做一次。"""
         try:
             import ctypes
             import ctypes.wintypes
@@ -188,9 +190,43 @@ def main(argv: list | None = None) -> int:
         except Exception:
             log.debug("记录浮窗位置失败", exc_info=True)
 
+    def _mini_dpr() -> float:
+        """主屏 DPI 缩放系数（pywebview 对 x/y 的放大倍数）。"""
+        try:
+            user32 = ctypes.windll.user32
+            # 主窗句柄取不到就退回主屏 DC 的 DPI
+            w = window.native if getattr(window, "native", None) else None
+            hwnd = int(w.Handle.ToInt64()) if w is not None else 0
+            if hwnd:
+                dpi = user32.GetDpiForWindow(hwnd)
+                if dpi > 0:
+                    return dpi / 96.0
+            hdc = user32.GetDC(0)
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)  # LOGPIXELSX
+            user32.ReleaseDC(0, hdc)
+            return dpi / 96.0 if dpi > 0 else 1.0
+        except Exception:
+            return 1.0
+
+    def _default_mini_pos() -> tuple[int, int]:
+        """默认位置：右下角。返回逻辑像素（pywebview x/y 的坐标系）。"""
+        try:
+            import ctypes
+            import ctypes.wintypes
+            user32 = ctypes.windll.user32
+            wa = ctypes.wintypes.RECT()
+            # SPI_GETWORKAREA 返回物理像素 → 除以 dpr 换算成逻辑
+            if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(wa), 0):
+                dpr = _mini_dpr()
+                return (int(wa.right / dpr) - MINI_W - 24,
+                        int(wa.bottom / dpr) - MINI_H - 24)
+        except Exception:
+            log.debug("计算浮窗默认位置失败", exc_info=True)
+        return (80, 80)
+
     def open_mini(x: int | None = None, y: int | None = None) -> None:
-        """打开悬浮窗。x/y 提供时放到指定物理像素位置（位置记忆恢复）；
-        未提供且无记录时默认放右下角（留 24px 边距）。"""
+        """打开悬浮窗。x/y 提供时放到指定逻辑像素位置；
+        未提供时读位置记忆（物理像素 → 除以 dpr 转逻辑），无效或超界则回默认右下角。"""
         theme = getattr(api.cfg, "theme", "dark")
         if mini_holder["win"] is not None:
             try:
@@ -199,24 +235,20 @@ def main(argv: list | None = None) -> int:
                 return
             except Exception:
                 mini_holder["win"] = None
-        # 首次无记录 → 默认右下角（主屏工作区，避开任务栏）
         if x is None or y is None:
             mx = cfg.mini_window.get("x", -1)
             my = cfg.mini_window.get("y", -1)
             if mx >= 0 and my >= 0:
-                x, y = mx, my
+                dpr = _mini_dpr()
+                # 物理像素换算成逻辑，再做屏幕边界防护（换错空间的旧记录必然超界）
+                lx, ly = int(mx / dpr), int(my / dpr)
+                sw = int(user32.GetSystemMetrics(0) / dpr) if (user32 := ctypes.windll.user32) else 0
+                sh = int(user32.GetSystemMetrics(1) / dpr) if user32 else 0
+                if sw > 0 and (lx + MINI_W > sw + 60 or ly + MINI_H > sh + 60):
+                    lx, ly = _default_mini_pos()
+                x, y = lx, ly
             else:
-                try:
-                    user32 = ctypes.windll.user32
-                    # SPI_GETWORKAREA → 任务栏以外的桌面区域
-                    wa = ctypes.wintypes.RECT()
-                    if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(wa), 0):
-                        x = wa.right - MINI_W - 24
-                        y = wa.bottom - MINI_H - 24
-                    else:
-                        x = y = 80
-                except Exception:
-                    x = y = 80
+                x, y = _default_mini_pos()
         x = max(0, int(x))
         y = max(0, int(y))
         try:
@@ -237,7 +269,10 @@ def main(argv: list | None = None) -> int:
             )
 
             def _mini_shown() -> None:
-                _apply_mini_style(mw, getattr(api.cfg, "theme", "dark"))
+                # 延迟 1.2s：等 WebView2 控制器初始化完再动窗口样式（透明/圆角/工具窗），
+                # 否则样式竞争会打断初始化（E_ABORT 黑屏）。延迟只影响样式，不影响功能。
+                threading.Timer(1.2, _apply_mini_style,
+                                (mw, getattr(api.cfg, "theme", "dark"))).start()
 
             def _mini_loaded() -> None:
                 # file:// 导航完成后 WebView2 可能重置底色，补一刀
@@ -298,6 +333,24 @@ def main(argv: list | None = None) -> int:
     api._open_mini = open_mini
     api._close_mini = close_mini
 
+    # 启动恢复浮窗的接应点：主窗前端 boot() 调 backend.boot_ready() 时触发。
+    # 这与"手动点按钮"的前置条件一致（主窗 JS 活跃 → WebView2 初始化完毕），
+    # 过早开浮窗会与主窗 WebView2 并发初始化冲突（E_ABORT 黑屏）。
+    def _boot_ready_impl() -> None:
+        if not getattr(api, "_boot_mini_pending", False):
+            return
+        api._boot_mini_pending = False
+        threading.Timer(0.5, open_mini).start()
+        threading.Timer(2.0, window.hide).start()   # 浮窗落定后再藏主窗
+    api._boot_ready = _boot_ready_impl
+    if getattr(api, "_boot_mini_pending", False):
+        # 保底：前端 15s 内没上报（加载失败/异常）→ 放弃恢复，主窗照常显示
+        def _boot_give_up() -> None:
+            if getattr(api, "_boot_mini_pending", False):
+                api._boot_mini_pending = False
+                log.warning("主窗 15s 未就绪，放弃恢复浮窗")
+        threading.Timer(15.0, _boot_give_up).start()
+
     _boot_ts = time.time()
 
     def _record_mini_state(shown: bool) -> None:
@@ -312,9 +365,6 @@ def main(argv: list | None = None) -> int:
 
     def _on_closing() -> bool:
         """窗口关闭请求：close_to_tray 开启且托盘可用 → 隐藏窗口、常驻托盘。"""
-        # 启动头 5 秒内的关闭请求一律忽略并留痕：曾出现过启动 ~9s 静默退出
-        # （无 Python 异常、无原生崩溃记录），疑似启动期状态未就绪时被意外
-        # close 信号穿透 _on_closing 放行。缓冲期 + 日志便于再发生时定位。
         if time.time() - _boot_ts < 5.0:
             log.warning("启动缓冲期内收到关闭请求，已忽略（防启动期闪退）")
             return False
@@ -347,17 +397,10 @@ def main(argv: list | None = None) -> int:
     window.events.closing += _on_closing
     window.events.closed += _on_closed
     tray.start()        # 常驻启动；是否隐藏到托盘由 _on_closing 按配置判断
-    # 上次退出时悬浮窗开着 → 本次启动自动恢复（延迟到界面就绪后；位置走记忆，
-    # 无记录则首次默认右下角）。窗口仍在主界面显示，用户可手动再收进浮窗。
-    if cfg.mini_window.get("show"):
-        threading.Timer(2.0, open_mini).start()
     log.info("界面已启动")
     webview.start(debug=args.debug)
-    # 兜底：无论从哪条路径退出（窗口 destroy / 托盘菜单退出 / 确认退出），
-    # webview.start 返回即主事件循环结束，托盘若还活着必须销毁，
-    # 否则 pystray daemon 线程虽死但 Explorer 托盘区图标残留。
     try:
-        tray.stop()
+        tray.stop()   # 兜底销毁，防托盘图标残留
     except Exception:
         pass
     return 0
