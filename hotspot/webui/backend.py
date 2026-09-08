@@ -11,7 +11,6 @@ import json
 import logging
 import threading
 import time
-import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
@@ -737,16 +736,6 @@ class HotspotBackend:
         self._pool.submit(self._gather_fast)
         return {"ok": True, "msg": f"已取消放行 {dev.ip or dev.mac}"}
 
-    def portal_clear(self) -> Dict[str, Any]:
-        self.captive.clear_allowed()
-        self._pool.submit(self._gather_fast)
-        return {"ok": True, "msg": "已清空放行名单"}
-
-    def portal_open(self) -> Dict[str, Any]:
-        url = self.captive.url if self.captive.running else f"http://{self.gateway}/"
-        webbrowser.open(url)
-        return {"ok": True, "msg": url}
-
     # ------------------------------ 其它 ------------------------------ #
     def diagnose(self) -> Dict[str, Any]:
         def work() -> Any:
@@ -760,13 +749,6 @@ class HotspotBackend:
 
     def get_diagnose(self) -> Dict[str, Any]:
         return {"lines": list(self._diag)}
-
-    def open_url(self, url: str) -> Dict[str, Any]:
-        try:
-            webbrowser.open(url)
-            return {"ok": True}
-        except Exception as exc:
-            return {"ok": False, "msg": str(exc)}
 
     # --------------------------- WiFi 二维码 --------------------------- #
     def wifi_qrcode(self) -> Dict[str, Any]:
@@ -1132,20 +1114,3 @@ class HotspotBackend:
     def pf_remove(self, name: str) -> Dict[str, Any]:
         ok, msg = self.portfwd.remove(name)
         return {"ok": ok, "msg": msg}
-
-    def pick_portal_file(self) -> Dict[str, Any]:
-        """用系统文件对话框挑选自定义门户 HTML。"""
-        try:
-            if not self._window:
-                return {"ok": False, "msg": "窗口未就绪"}
-            import webview
-            result = self._window.create_file_dialog(
-                webview.OPEN_DIALOG,
-                allow_multiple=False,
-                file_types=("HTML 文件 (*.html;*.htm)",),
-            )
-            if result and len(result):
-                return {"ok": True, "path": str(result[0])}
-            return {"ok": False, "msg": "未选择文件"}
-        except Exception as exc:
-            return {"ok": False, "msg": str(exc)}

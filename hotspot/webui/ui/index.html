@@ -112,7 +112,7 @@
     </div>
     <div id="emptyState" class="empty hidden">
       <div class="empty-emoji">📶</div>
-      <div class="empty-text">开启热点后，连进来的设备会显示在这里</div>
+      <div class="empty-text">开启热点后，已连接的设备会显示在这里</div>
     </div>
   </section>
 </main>
@@ -160,7 +160,7 @@
       </div>
       <label class="switch-row">
         <input id="cfgAutoStart" type="checkbox" class="switch">
-        <span>程序启动时自动开启热点</span>
+        <span>启动时自动开启热点</span>
       </label>
       <label class="switch-row">
         <input id="cfgStartWin" type="checkbox" class="switch">
@@ -168,15 +168,15 @@
       </label>
       <label class="switch-row">
         <input id="cfgCloseTray" type="checkbox" class="switch">
-        <span>关闭时最小化到托盘（需 pip install pystray pillow）</span>
+        <span>关闭时最小化到托盘</span>
       </label>
       <label class="switch-row">
         <input id="cfgConfirmExit" type="checkbox" class="switch">
-        <span>退出时热点仍在运行 → 提醒确认</span>
+        <span>退出时热点开启中 → 提醒确认</span>
       </label>
       <div class="field-row">
         <div class="field">
-          <label>⏳ 临时密码（访客专用，到期自动恢复原密码）</label>
+          <label>⏳ 临时密码（到期自动恢复原密码）</label>
           <div class="field-row">
             <select id="cfgTempHours" style="flex:1">
               <option value="1">1 小时</option>
@@ -202,7 +202,7 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>定时关闭热点（分钟，0=取消）</label>
+          <label>定时关闭（分钟，0=取消）</label>
           <select id="cfgAutoStop">
             <option value="0">不定时</option>
             <option value="15">15 分钟</option>
@@ -216,7 +216,6 @@
           <button id="btnAutoStop" class="btn ghost">应用定时</button>
         </div>
       </div>
-      <div id="autoStopHint" class="hint hidden"></div>
       <div class="modal-foot">
         <button id="btnApply" class="btn ghost">立即下发配置</button>
         <button id="btnSave" class="btn primary">保存</button>
@@ -231,11 +230,11 @@
     <div class="modal-body">
       <label class="switch-row">
         <input id="pfEnabled" type="checkbox" class="switch">
-        <span>开启强制门户（连上热点先看到欢迎页，同意后才放行上网）</span>
+        <span>开启强制门户（连上先看欢迎页，同意后放行）</span>
       </label>
       <label class="switch-row">
         <input id="pfDns" type="checkbox" class="switch">
-        <span>DNS 劫持（让设备自动弹出门户页，必需）</span>
+        <span>DNS 劫持（设备自动弹出门户页）</span>
       </label>
       <div class="field-row">
         <div class="field">
@@ -262,17 +261,17 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label>访问密码（空 = 不需要）</label>
+          <label>访问密码（空=不需要）</label>
           <input id="pfPassword" type="text" placeholder="访客需输入此密码才能看到欢迎页">
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>放行时段开始（小时）</label>
+          <label>放行时段开始</label>
           <select id="pfSchStart"></select>
         </div>
         <div class="field">
-          <label>放行时段结束（小时）</label>
+          <label>放行时段结束</label>
           <select id="pfSchEnd"></select>
         </div>
       </div>
@@ -314,7 +313,7 @@
     <div class="modal-head"><h3>🔗 扫码连接</h3><button class="icon-btn" data-close="qrModal">✕</button></div>
     <div class="modal-body" style="align-items:center;text-align:center">
       <img id="qrImage" alt="WiFi 二维码" style="width:220px;height:220px;border-radius:12px;background:#fff;padding:8px">
-      <div class="hint">用手机相机扫码即可连接此热点，无需手动输入密码</div>
+      <div class="hint">手机相机扫码即可连接，无需输入密码</div>
     </div>
   </div>
 </div>
@@ -328,16 +327,16 @@
         <div class="stat"><div class="stat-v down" id="stRx">—</div><div class="stat-k">接收</div></div>
         <div class="stat"><div class="stat-v up" id="stTx">—</div><div class="stat-k">发送</div></div>
       </div>
-      <div class="field"><label>每日流量（近 14 天）</label>
+      <div class="field"><label>每日流量</label>
         <div id="statDaily" class="bar-chart"></div>
       </div>
-      <div class="field"><label>用量 TOP 设备</label>
+      <div class="field"><label>流量 TOP 设备</label>
         <div id="statTop" class="top-list"></div>
       </div>
-      <div class="field"><label>域名访问排行</label>
+      <div class="field"><label>域名排行</label>
         <div id="statDomains" class="top-list"></div>
       </div>
-      <div class="field"><label>最近 DNS 访问（URL 日志）</label>
+      <div class="field"><label>最近 DNS 访问</label>
         <div id="statQueries" class="query-list"></div>
       </div>
     </div>
@@ -349,7 +348,7 @@
     <div class="modal-head"><h3>🧰 工具箱</h3><button class="icon-btn" data-close="toolsModal">✕</button></div>
     <div class="modal-body">
       <div class="field">
-        <label>📤 文件共享（手机浏览器打开即可互传文件）</label>
+        <label>📤 文件共享（手机浏览器直接互传文件）</label>
         <div class="hint" id="shareStatus">未启动</div>
         <div class="modal-foot" style="justify-content:flex-start">
           <button id="btnShareStart" class="btn primary">启动</button>
@@ -358,7 +357,7 @@
         </div>
       </div>
       <div class="field">
-        <label>🎮 端口转发（游戏模式 · TCP）</label>
+        <label>🎮 端口转发（TCP）</label>
         <div class="field-row">
           <input id="pfName" type="text" placeholder="名称" style="max-width:110px">
           <input id="pfLPort" type="number" placeholder="本机端口" style="max-width:100px">
@@ -376,7 +375,7 @@
   <div class="modal-card small">
     <div class="modal-head"><h3>⚠️ 热点仍在运行</h3><button class="icon-btn" data-close="exitModal">✕</button></div>
     <div class="modal-body" style="text-align:center">
-      <div class="hint" style="margin-bottom:14px">热点当前处于开启状态，退出软件后设备将无法上网。<br>确定要退出吗？</div>
+      <div class="hint" style="margin-bottom:14px">热点开启中，退出后设备将无法上网。确定退出吗？</div>
       <div class="modal-foot" style="justify-content:center">
         <button id="btnExitCancel" class="btn ghost">返回</button>
         <button id="btnExitOk" class="btn primary">确认退出</button>

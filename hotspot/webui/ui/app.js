@@ -364,7 +364,7 @@
     if (p.need_password) txt += " · 需访问密码";
     if (p.running) txt += "\nDNS 劫持：" + (p.dns ? "生效中" : "未生效 — " + (p.dns_error || "未知原因"));
     if (p.running) txt += "\n已放行设备：" + (p.allowed || 0) + " 台　劫持查询：" + (p.hijacked || 0) + " 次";
-    if (p.running && p.schedule_open === false) txt += "\n当前不在放行时段（" + (p.schedule || "") + "），新设备暂无法通过门户";
+    if (p.running && p.schedule_open === false) txt += "\n不在放行时段（" + (p.schedule || "") + "），新设备无法通过门户";
     txt += "\n门户地址：" + (p.url || "");
     setText($("#pfStatus"), txt);
   }
@@ -436,7 +436,7 @@
       setText($(".size", el), d.c + " 次");
       dom.appendChild(el);
     });
-    if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">暂无记录（开启强制门户并启用 DNS 劫持后开始记录）</div>';
+    if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">暂无记录（需开启强制门户的 DNS 劫持）</div>';
     // 最近访问
     const q = $("#statQueries");
     q.innerHTML = "";
@@ -456,7 +456,7 @@
     const st = state || {};
     const s = st.share || {};
     setText($("#shareStatus"),
-      s.running ? ("运行中 · 手机浏览器打开：" + (s.url || "")) : "未启动");
+      s.running ? ("运行中 · " + (s.url || "")) : "未启动");
     // 端口转发列表
     const list = $("#pfList");
     list.innerHTML = "";
@@ -506,7 +506,7 @@
       const lp = parseInt($("#pfLPort").value, 10);
       const ip = $("#pfIp").value.trim();
       const cp = parseInt($("#pfCPort").value, 10);
-      if (!lp || !ip || !cp) { toast("请填写完整的端口转发信息", "error"); return; }
+      if (!lp || !ip || !cp) { toast("请填写完整端口转发信息", "error"); return; }
       api().pf_add(name, lp, ip, cp).then((r) => {
         toast(r.msg, r.ok ? "success" : "error");
         if (r.ok) { $("#pfName").value = $("#pfLPort").value = $("#pfIp").value = $("#pfCPort").value = ""; fillTools(); }
@@ -656,7 +656,7 @@
       }).then((r) => { toast(r.ok ? "设置已保存" : r.msg, r.ok ? "success" : "error"); if (r.ok) closeModal("settingsModal"); });
     });
     $("#btnApply").addEventListener("click", () => {
-      api().apply_now().then(() => toast("正在下发配置到系统…", "info"));
+      api().apply_now().then(() => toast("正在下发配置…", "info"));
     });
 
     // 门户
@@ -675,10 +675,10 @@
       api().save_config(portalPatch()).then((r) => toast(r.ok ? "已保存" : r.msg, r.ok ? "success" : "error"));
     });
     $("#btnPfStart").addEventListener("click", () => {
-      api().save_config(portalPatch()).then(() => api().portal_start().then(() => toast("正在启动强制门户…", "info")));
+      api().save_config(portalPatch()).then(() => api().portal_start().then(() => toast("正在启动门户…", "info")));
     });
     $("#btnPfStop").addEventListener("click", () => {
-      api().portal_stop().then(() => toast("已停止强制门户", "info"));
+      api().portal_stop().then(() => toast("门户已停止", "info"));
     });
   }
 

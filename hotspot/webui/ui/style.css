@@ -233,12 +233,6 @@ html[data-theme="light"] .dial.on .dial-inner{
 .dial-emoji{font-size:40px;line-height:1;transition:transform .4s var(--ease),filter .4s var(--ease)}
 .dial.on .dial-emoji{filter:drop-shadow(0 0 12px rgba(88,166,255,.7));animation:emojiBob 2.6s ease-in-out infinite}
 @keyframes emojiBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-.dial.just-changed .dial-emoji{animation:emojiPop .55s var(--spring)}
-@keyframes emojiPop{
-  0%{transform:scale(.4) rotate(-24deg);opacity:0}
-  60%{transform:scale(1.22) rotate(6deg)}
-  100%{transform:scale(1) rotate(0);opacity:1}
-}
 .dial-text{font-size:15px;font-weight:600;letter-spacing:.5px}
 .dial-sub{font-size:11px;color:var(--muted)}
 
