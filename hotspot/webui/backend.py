@@ -971,6 +971,9 @@ class HotspotBackend:
             self.cfg.save()
         return {"ok": True}
 
+    def get_theme(self) -> str:
+        return self.cfg.theme
+
     def mini_state(self) -> Dict[str, Any]:
         """迷你浮窗专用轻量状态（只读缓存，不触发任何采集）。"""
         with self._lock:
@@ -983,6 +986,18 @@ class HotspotBackend:
 
     def mini_toggle(self) -> Dict[str, Any]:
         return self.toggle()
+
+    def move_mini(self, dx: float, dy: float) -> Dict[str, Any]:
+        """迷你浮窗增量移动（JS 拖拽回调）。屏幕物理坐标，负值=左/上。"""
+        app_ref = getattr(self, "_app_ref", None)
+        if not app_ref:
+            return {"ok": False}
+        try:
+            app_ref["move_mini"](float(dx), float(dy))
+            return {"ok": True}
+        except Exception:
+            log.debug("浮窗移动失败", exc_info=True)
+            return {"ok": False}
 
     def mini_restore_main(self) -> Dict[str, Any]:
         """迷你浮窗右键：显示主窗口、关闭浮窗。"""

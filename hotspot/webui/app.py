@@ -7,7 +7,11 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
+import time
 from pathlib import Path
+
+import ctypes.wintypes  # noqa: F401  (圆角 Region 用)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 INDEX_FILE = UI_DIR / "index.html"
@@ -75,14 +79,67 @@ def main(argv: list | None = None) -> int:
     api.attach_window(window)
     api._tray = tray
 
-    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动） ----
+    # ---- 迷你悬浮窗（第二个 frameless 小窗，置顶、可拖动、色键透明圆角） ----
     MINI_FILE = UI_DIR / "mini.html"
+    MINI_W, MINI_H = 192, 64
+    # 抗锯齿圆角方案（SetWindowRgn 是 1-bit 硬裁剪必有锯齿，已废弃）：
+    #   1. WebView2 DefaultBackgroundColor = alpha 0（页面圆角外像素不画）
+    #   2. Form TransparencyKey/BackColor = 色键（Form 表面整面抠成透明）
+    #   3. mini.html 圆角外透明 → 角落透出桌面，圆弧边缘保留 HTML 抗锯齿
+    # 色键取卡片描边邻近色，不能与卡片内任何颜色相同，否则被抠洞。
+    MINI_KEY_HEX = "#1e2d49"
     mini_holder = {"win": None}
+
+    def _find_webview2(ctrl):
+        for c in ctrl.Controls:
+            try:
+                name = str(type(c))
+            except Exception:
+                name = ""
+            if "WebView2" in name or "WebBrowser" in name:
+                return c
+            hit = _find_webview2(c)
+            if hit is not None:
+                return hit
+        return None
+
+    def _apply_colorkey(w, stage: str = "shown") -> None:
+        """色键透明。WebView2 COM 属性必须投递到 UI 线程设置（后台线程直接调
+        会抛 CoreWebView2Controller members can only be accessed from the UI thread）。
+        file:// 导航会重置 WebView2 底色 → shown 和 loaded 各设一次（loaded 晚于 shown）。"""
+
+        def work() -> None:
+            try:
+                import System.Drawing as sd
+                from System import Action
+
+                key = sd.ColorTranslator.FromHtml(MINI_KEY_HEX)
+                alpha0 = sd.Color.FromArgb(0, 0, 0, 0)
+                form = w.native
+
+                def ui_work():
+                    form.TransparencyKey = key
+                    form.BackColor = key
+                    wb = _find_webview2(form)
+                    if wb is not None:
+                        try:
+                            wb.DefaultBackgroundColor = alpha0
+                            if stage == "loaded":
+                                print("[mini] colorkey applied at loaded", flush=True)
+                        except Exception:
+                            log.debug("WebView2 底色透明设置失败", exc_info=True)
+
+                form.BeginInvoke(Action(ui_work))
+            except Exception:
+                log.debug("色键透明失败", exc_info=True)
+        import threading
+        threading.Thread(target=work, daemon=True).start()
 
     def open_mini() -> None:
         if mini_holder["win"] is not None:
             try:
                 mini_holder["win"].show()
+                _apply_colorkey(mini_holder["win"])
                 return
             except Exception:
                 mini_holder["win"] = None
@@ -91,15 +148,38 @@ def main(argv: list | None = None) -> int:
                 title="热点浮窗",
                 url=MINI_FILE.as_uri(),
                 js_api=api,
-                width=190, height=64,
-                min_size=(190, 64),     # 默认 (200,100) 会把小窗强制撑大
+                width=MINI_W, height=MINI_H,
+                min_size=(MINI_W, MINI_H),  # 默认 (200,100) 会把小窗强制撑大
                 resizable=False,
                 frameless=True, easy_drag=True, on_top=True,
-                shadow=False,           # 阴影会在圆角外画出直角框
-                transparent=True,       # 透明窗口才能露出真圆角（EdgeChromium）
+                shadow=False,
                 hidden=False,
             )
+
+            def _mini_shown() -> None:
+                _apply_colorkey(mw, "shown")
+
+            def _mini_loaded() -> None:
+                # file:// 导航完成后 WebView2 会重置底色，必须补一刀
+                _apply_colorkey(mw, "loaded")
+            mw.events.shown += _mini_shown
+            mw.events.loaded += _mini_loaded
+            # 兜底：2s 后再补一次（loaded 可能早于我们订阅，或渲染树晚完成）
+            def _mini_late() -> None:
+                time.sleep(2.0)
+                try:
+                    _apply_colorkey(mw, "loaded")
+                except Exception:
+                    pass
+            def _mini_late() -> None:
+                time.sleep(2.0)
+                try:
+                    _apply_colorkey(mw, "loaded")
+                except Exception:
+                    pass
+            threading.Thread(target=_mini_late, daemon=True).start()
             mini_holder["win"] = mw
+            api._mini_window = mw
             api._close_mini = close_mini
 
             def _mini_closed() -> None:
@@ -107,6 +187,30 @@ def main(argv: list | None = None) -> int:
             mw.events.closed += _mini_closed
         except Exception:
             log.exception("迷你浮窗创建失败")
+
+    def _move_mini_impl(dx: float, dy: float) -> None:
+        """增量移动浮窗：读物理位置 → SetWindowPos。JS 屏幕坐标=物理像素。"""
+        w = mini_holder["win"]
+        if w is None:
+            return
+        try:
+            import ctypes
+            import ctypes.wintypes
+
+            hwnd = int(w.native.Handle.ToInt64())
+            user32 = ctypes.windll.user32
+            rect = ctypes.wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            # JS screenX/screenY 是物理像素；窗口物理位置 + 增量
+            user32.SetWindowPos(
+                hwnd, None,
+                int(rect.left + dx), int(rect.top + dy),
+                None, None, 0x0001 | 0x0004 | 0x0040,  # NOSIZE|NOZORDER|SHOWWINDOW
+            )
+        except Exception:
+            log.debug("浮窗增量移动失败", exc_info=True)
+
+    api._app_ref = {"move_mini": _move_mini_impl}
 
     def close_mini() -> None:
         w = mini_holder["win"]

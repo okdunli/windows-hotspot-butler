@@ -21,14 +21,14 @@ except ImportError:
 
 
 def _icon_image():
-    """64x64 的 📶 风格托盘图标（信号弧线），避免依赖外部图片文件。"""
+    """64x64 的 WiFi 信号托盘图标：弧线居中放大，避免偏下显得小。"""
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    cx, cy = 32, 54
-    for i, r in enumerate((10, 20, 30)):
+    cx, cy = 32, 42          # 圆心（顶点/圆点位置），弧线向上展开
+    for r in (12, 24, 36):   # 三道弧，最外圈几乎顶满画布
         bbox = [cx - r, cy - r, cx + r, cy + r]
-        d.arc(bbox, start=225, end=315, fill=(88, 166, 255, 255), width=6)
-    d.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=(88, 166, 255, 255))
+        d.arc(bbox, start=225, end=315, fill=(88, 166, 255, 255), width=7)
+    d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(88, 166, 255, 255))
     return img
 
 
