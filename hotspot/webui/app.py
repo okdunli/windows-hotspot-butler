@@ -55,10 +55,15 @@ def main(argv: list | None = None) -> int:
 
     from .backend import HotspotBackend
     from .tray import TrayIcon
+    from .hotkey import start_global_hotkey
 
     _dpi_aware()
     api = HotspotBackend()
     api._exit_confirmed = False
+
+    # 全局热键 Ctrl+Alt+H 开关热点（注册失败/被用户关闭时静默降级）
+    if api.cfg.hotkey_enabled:
+        start_global_hotkey(lambda: api.toggle())
 
     window = webview.create_window(
         title="WiFi 热点管理器",

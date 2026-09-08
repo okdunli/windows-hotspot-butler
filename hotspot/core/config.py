@@ -65,6 +65,7 @@ class PortalConfig:
 @dataclass
 class AppConfig:
     theme: str = "dark"             # dark | light
+    language: str = "auto"          # auto（跟随系统）| zh_CN | en
     poll_interval: float = 4.0
     traffic_backend: str = "auto"
     demo_mode: bool = False
@@ -72,6 +73,7 @@ class AppConfig:
     start_with_windows: bool = False
     close_to_tray: bool = False     # 关闭窗口时最小化到托盘而非退出
     confirm_exit_hotspot: bool = True   # 退出时热点仍开着 → 弹确认
+    hotkey_enabled: bool = True     # 全局热键 Ctrl+Alt+H 开关热点
     temp_password: str = ""             # 临时密码（空=未启用）
     temp_password_until: float = 0.0    # 临时密码到期时间戳
     window_geometry: str = ""
@@ -143,6 +145,8 @@ class AppConfig:
         p.port = max(1, min(65535, int(p.port or 8080)))
         if self.theme not in ("dark", "light"):
             self.theme = "dark"
+        if self.language not in ("auto", "zh_CN", "en"):
+            self.language = "auto"
         self.poll_interval = max(1.0, min(30.0, float(self.poll_interval or 4.0)))
         if self.traffic_backend not in dict(TRAFFIC_CHOICES):
             self.traffic_backend = "auto"

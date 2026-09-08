@@ -12,6 +12,24 @@
   let passShown = false;
   let menuMac = null;
   let busy = false;
+  let I18N = {};                       // en 翻译表（zh 模式为空表，原文即中文）
+
+  const t = (key, vars) => {
+    let s = I18N[key] || key;
+    if (vars) for (const k in vars) s = s.split("{" + k + "}").join(vars[k]);
+    return s;
+  };
+
+  /* 静态文案批量翻译：叶子文本节点 / title / placeholder 按原文查表 */
+  function applyI18nStatic() {
+    $$("body *").forEach((el) => {
+      if (el.children.length === 0 && el.textContent && I18N[el.textContent.trim()]) {
+        el.textContent = I18N[el.textContent.trim()];
+      }
+      if (el.title && I18N[el.title]) el.title = I18N[el.title];
+      if (el.placeholder && I18N[el.placeholder]) el.placeholder = I18N[el.placeholder];
+    });
+  }
 
   const api = () => window.pywebview.api;
 
@@ -36,9 +54,9 @@
         document.execCommand("copy");
         ta.remove();
       }
-      toast("已复制：" + text, "success");
+      toast(t("已复制：{t}", { t: text }), "success");
     } catch (e) {
-      toast("复制失败：" + e, "error");
+      toast(t("复制失败：{e}", { e: e }), "error");
     }
   }
 
@@ -114,22 +132,22 @@
     setClass(dial, "on", hs.active && !busy);
     setClass(dial, "busy", busy);
     setText($("#dialEmoji"), hs.active ? "📶" : "📡");
-    setText($("#dialText"), busy ? "处理中…" : (hs.active ? "点击关闭" : "点击开启"));
-    setText($("#dialSub"), hs.active ? (hs.ssid || "已开启") : "未运行");
+    setText($("#dialText"), busy ? t("处理中…") : (hs.active ? t("点击关闭") : t("点击开启")));
+    setText($("#dialSub"), hs.active ? (hs.ssid || t("已开启")) : t("未运行"));
 
       const pill = $("#statusPill");
     pill.className = "pill " + (busy ? "busy" : (hs.active ? "on" : ""));
     pill.innerHTML = hs.active
-      ? '<span class="pulse"></span>' + (busy ? "切换中…" : "运行中") + (hs.uptime ? " · " + hs.uptime : "")
-      : (busy ? "切换中…" : "未开启");
-    setText($("#uptimeText"), hs.max_clients ? "上限 " + hs.max_clients + " 台" : "");
+      ? '<span class="pulse"></span>' + (busy ? t("切换中…") : t("运行中")) + (hs.uptime ? " · " + hs.uptime : "")
+      : (busy ? t("切换中…") : t("未开启"));
+    setText($("#uptimeText"), hs.max_clients ? t("上限 {n} 台", { n: hs.max_clients }) : "");
     setText($("#backendText"), hs.backend_label || "");
 
     const remain = (st.auto_stop || {}).remaining || 0;
     const stopEl = $("#autoStopText");
     if (remain > 0) {
       const mm = Math.floor(remain / 60), ss = remain % 60;
-      setText(stopEl, "⏱ " + mm + ":" + String(ss).padStart(2, "0") + " 后关闭");
+      setText(stopEl, t("⏱ {t} 后关闭", { t: "⏱ " + mm + ":" + String(ss).padStart(2, "0") }));
       stopEl.classList.remove("hidden");
     } else {
       stopEl.classList.add("hidden");
@@ -143,15 +161,17 @@
     setTextFlash($("#statOnline"), s.online || 0, "flash");
     setTextFlash($("#statDown"), s.down_text || "0 B/s", "flash");
     setTextFlash($("#statUp"), s.up_text || "0 B/s", "flash");
+    pushSpark(s.down || 0, s.up || 0);
+    drawSpark();
 
       const badge = $("#adminBadge");
     badge.className = "badge " + (st.admin ? "ok" : "warn");
-    setText(badge, st.admin ? "管理员" : "非管理员");
+    setText(badge, st.admin ? t("管理员") : t("非管理员"));
 
       const warn = $("#warnBanner");
     const caps = st.caps || {};
     if (!caps.can_host && !hs.active) {
-      setText(warn, caps.block_reason || "本机未检测到可用的热点能力");
+      setText(warn, caps.block_reason || t("本机未检测到可用的热点能力"));
       warn.classList.remove("hidden");
     } else {
       warn.classList.add("hidden");
@@ -161,7 +181,7 @@
     const chip = $("#portalChip");
     chip.classList.toggle("hidden", !p.running);
     chip.classList.toggle("on", !!p.running && !!p.dns);
-    setText(chip, p.running ? (p.dns ? "门户 · 劫持中" : "门户 · 仅手动") : "门户 未启动");
+    setText(chip, p.running ? (p.dns ? t("门户 · 劫持中") : t("门户 · 仅手动")) : t("门户 未启动"));
 
       renderDevices(st.devices || []);
     const cnt = $("#devCount");
@@ -187,7 +207,7 @@
       '<div class="dev-sub"></div>' +
       '<div class="dev-rate"><span class="down"></span><span class="up"></span></div>' +
       "</div>" +
-      '<button class="dev-more" title="更多">⋯</button>';
+      '<button class="dev-more" title="' + t("更多") + '">⋯</button>';
     $(".dev-more", el).addEventListener("click", (ev) => {
       ev.stopPropagation();
       openMenu(d.mac, ev.currentTarget);
@@ -211,12 +231,12 @@
     const tag = $(".tag", el);
     if (d.blocked) {
       tag.className = "tag";
-      setText(tag, "已禁止");
+      setText(tag, t("已禁止"));
     } else if (!d.online) {
       tag.className = "tag hidden";
     } else if (d.allowed) {
       tag.className = "tag ok";
-      setText(tag, "已放行");
+      setText(tag, t("已放行"));
     } else {
       tag.className = "tag hidden";
     }
@@ -259,8 +279,8 @@
     if (!dev) return;
     menuMac = mac;
     setText($("#menuTitle"), (dev.name || mac) + (dev.ip ? " · " + dev.ip : ""));
-    $("#menuBlock").textContent = dev.blocked ? "✅ 恢复上网" : "🚫 禁止上网";
-    $("#menuPortal").textContent = dev.allowed ? "⛔ 取消放行" : "🌐 放行门户";
+    $("#menuBlock").textContent = dev.blocked ? t("✅ 恢复上网") : t("🚫 禁止上网");
+    $("#menuPortal").textContent = dev.allowed ? t("⛔ 取消放行") : t("🌐 放行门户");
 
     const row = $("#emojiRow");
     row.innerHTML = "";
@@ -270,7 +290,7 @@
       b.title = ic.label;
       if (ic.key === dev.type) b.style.background = "rgba(88,166,255,.22)";
       b.addEventListener("click", () => {
-        api().set_device_type(mac, ic.key).then(() => { closeMenu(); toast("已更新设备类型", "success"); });
+        api().set_device_type(mac, ic.key).then(() => { closeMenu(); toast(t("已更新设备类型"), "success"); });
       });
       row.appendChild(b);
     });
@@ -325,11 +345,12 @@
     $("#cfgStartWin").checked = !!c.start_with_windows;
     $("#cfgCloseTray").checked = !!c.close_to_tray;
     $("#cfgConfirmExit").checked = c.confirm_exit_hotspot !== false;
+    $("#cfgLang").value = state.lang || "zh_CN";
     const tp = state.temp_password || {};
     const hint = $("#tempPwHint");
     if (tp.active) {
       const m = Math.floor((tp.remaining || 0) / 60);
-      setText(hint, "生效中：" + tp.password + " · 剩余 " + m + " 分钟");
+      setText(hint, t("生效中：{pw} · 剩余 {m} 分钟", { pw: tp.password, m: m }));
       hint.classList.remove("hidden");
     } else {
       hint.classList.add("hidden");
@@ -347,12 +368,12 @@
     $("#pfButton").value = c.portal_button || "";
     $("#pfPassword").value = c.portal_password || "";
     fillScheduleSelects(c.portal_schedule_start, c.portal_schedule_end);
-    let txt = "状态：" + (p.running ? "运行中" : "未启动");
-    if (p.need_password) txt += " · 需访问密码";
-    if (p.running) txt += "\nDNS 劫持：" + (p.dns ? "生效中" : "未生效 — " + (p.dns_error || "未知原因"));
-    if (p.running) txt += "\n已放行设备：" + (p.allowed || 0) + " 台　劫持查询：" + (p.hijacked || 0) + " 次";
-    if (p.running && p.schedule_open === false) txt += "\n不在放行时段（" + (p.schedule || "") + "），新设备无法通过门户";
-    txt += "\n门户地址：" + (p.url || "");
+    let txt = t("状态：{s}", { s: p.running ? t("运行中") : t("未启动") });
+    if (p.need_password) txt += " " + t("需访问密码");
+    if (p.running) txt += "\n" + t("DNS 劫持：{s}", { s: p.dns ? t("生效中") : t("未生效 — {r}", { r: p.dns_error || t("未知原因") }) });
+    if (p.running) txt += "\n" + t("已放行设备：{n} 台　劫持查询：{q} 次", { n: p.allowed || 0, q: p.hijacked || 0 });
+    if (p.running && p.schedule_open === false) txt += "\n" + t("不在放行时段（{s}），新设备无法通过门户", { s: p.schedule || "" });
+    txt += "\n" + t("门户地址：{u}", { u: p.url || "" });
     setText($("#pfStatus"), txt);
   }
 
@@ -364,14 +385,54 @@
         const o2 = new Option(String(h).padStart(2, "0") + ":00", h === 23 ? 24 : h + 1);
         s.add(o1); e.add(o2);
       }
-      e.add(new Option("24:00（全天）", 24));
+      e.add(new Option(t("24:00（全天）"), 24));
     }
     s.value = String(sv == null ? 0 : sv);
     e.value = String(ev == null ? 24 : ev);
   }
 
+  /* ---- 实时网速曲线：环形缓冲 + 纯 canvas 双线（下=蓝 上=紫） ---- */
+  const SPARK_N = 90;                       // 90 个采样点 ≈ 最近 2 分钟
+  const sparkBuf = { down: [], up: [] };
+  function pushSpark(down, up) {
+    sparkBuf.down.push(down); sparkBuf.up.push(up);
+    if (sparkBuf.down.length > SPARK_N) sparkBuf.down.shift();
+    if (sparkBuf.up.length > SPARK_N) sparkBuf.up.shift();
+  }
+  function drawSpark() {
+    const cv = $("#sparkline");
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const down = getComputedStyle(document.documentElement).getPropertyValue("--accent-2").trim() || "#58A6FF";
+    const up = getComputedStyle(document.documentElement).getPropertyValue("--purple").trim() || "#a371f7";
+    const grid = getComputedStyle(document.documentElement).getPropertyValue("--border").trim() || "rgba(255,255,255,.08)";
+    // 横向网格（3 条）
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) {
+      const y = H * i / 4 + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    const peak = Math.max(1, ...sparkBuf.down, ...sparkBuf.up);
+    const draw = (arr, color) => {
+      if (arr.length < 2) return;
+      ctx.beginPath();
+      arr.forEach((v, i) => {
+        const x = W - (arr.length - 1 - i) * (W / (SPARK_N - 1));
+        const y = H - 4 - (v / peak) * (H - 10);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6;
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.stroke();
+    };
+    draw(sparkBuf.down, down);
+    draw(sparkBuf.up, up);
+  }
+
   function renderStats(r) {
-    if (!r || !r.ok) { toast((r && r.msg) || "统计读取失败", "error"); return; }
+    if (!r || !r.ok) { toast((r && r.msg) || t("统计读取失败"), "error"); return; }
     setText($("#stTotal"), (r.grand && r.grand.total) || "0 B");
     setText($("#stRx"), (r.grand && r.grand.rx) || "0 B");
     setText($("#stTx"), (r.grand && r.grand.tx) || "0 B");
@@ -417,10 +478,10 @@
       el.className = "top-item";
       el.innerHTML = '<span class="top-name"></span><span class="size"></span>';
       setText($(".top-name", el), d.domain);
-      setText($(".size", el), d.c + " 次");
+      setText($(".size", el), t("{n} 次", { n: d.c }));
       dom.appendChild(el);
     });
-    if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">暂无记录（需开启强制门户的 DNS 劫持）</div>';
+    if (!(r.top_domains || []).length) dom.innerHTML = '<div class="hint">' + t("暂无记录（需开启强制门户的 DNS 劫持）") + "</div>";
     const q = $("#statQueries");
     q.innerHTML = "";
     (r.queries || []).slice(0, 40).forEach((it) => {
@@ -432,21 +493,21 @@
       setText($(".size", el), it.name || it.ip || "");
       q.appendChild(el);
     });
-    if (!(r.queries || []).length) q.innerHTML = '<div class="hint">暂无记录</div>';
+    if (!(r.queries || []).length) q.innerHTML = '<div class="hint">' + t("暂无记录") + "</div>";
   }
 
   function fillTools() {
     const st = state || {};
     const s = st.share || {};
     setText($("#shareStatus"),
-      s.running ? ("运行中 · " + (s.url || "")) : "未启动");
+      s.running ? (t("运行中") + " · " + (s.url || "")) : t("未启动"));
     const list = $("#pfList");
     list.innerHTML = "";
     (st.port_fwd || []).forEach((r) => {
       const el = document.createElement("div");
       el.className = "top-item";
       el.innerHTML = '<span class="top-name"></span><span class="size"></span>' +
-        '<button class="mini danger-mini" title="删除">🗑️</button>';
+        '<button class="mini danger-mini" title="' + t("删除") + '">🗑️</button>';
       setText($(".top-name", el), r.name + "：" + r.listen_port + " → " + r.connect_ip + ":" + r.connect_port);
       $("button", el).addEventListener("click", () =>
         api().pf_remove(r.name).then((res) => { toast(res.msg, res.ok ? "success" : "error"); fillTools(); }));
@@ -472,6 +533,10 @@
     });
 
     $("#btnTools").addEventListener("click", () => { fillTools(); openModal("toolsModal"); });
+    $("#btnSpeedTest").addEventListener("click", () => {
+      toast(t("正在测速…"), "info");
+      api().speed_test();
+    });
     $("#btnShareStart").addEventListener("click", () =>
       api().share_start().then(() => setTimeout(fillTools, 600)));
     $("#btnShareStop").addEventListener("click", () =>
@@ -482,7 +547,7 @@
       const lp = parseInt($("#pfLPort").value, 10);
       const ip = $("#pfIp").value.trim();
       const cp = parseInt($("#pfCPort").value, 10);
-      if (!lp || !ip || !cp) { toast("请填写完整端口转发信息", "error"); return; }
+      if (!lp || !ip || !cp) { toast(t("请填写完整端口转发信息"), "error"); return; }
       api().pf_add(name, lp, ip, cp).then((r) => {
         toast(r.msg, r.ok ? "success" : "error");
         if (r.ok) { $("#pfName").value = $("#pfLPort").value = $("#pfIp").value = $("#pfCPort").value = ""; fillTools(); }
@@ -529,11 +594,11 @@
     $("#btnSettings").addEventListener("click", () => { fillSettings(); openModal("settingsModal"); });
     $("#btnPortal").addEventListener("click", () => { fillPortal(); openModal("portalModal"); });
     $("#btnDiag").addEventListener("click", () => {
-      setText($("#diagText"), "正在收集…");
+      setText($("#diagText"), t("正在收集…"));
       openModal("diagModal");
       api().diagnose().then(() => {
         setTimeout(() => api().get_diagnose().then((r) => {
-          setText($("#diagText"), (r.lines || []).join("\n") || "无输出");
+          setText($("#diagText"), (r.lines || []).join("\n") || t("无输出"));
         }), 2500);
       });
     });
@@ -559,7 +624,7 @@
       if (!mac) return;
       if (act === "rename") {
         const dev = (state.devices || []).find((d) => d.mac === mac);
-        promptText("重命名设备", (dev && dev.name) || "").then((v) => {
+        promptText(t("重命名设备"), (dev && dev.name) || "").then((v) => {
           if (v !== null && v.trim()) api().set_device_name(mac, v.trim()).then((r) => toast(r.msg, r.ok ? "success" : "error"));
         });
       } else if (act === "block") {
@@ -595,7 +660,7 @@
       const h = parseFloat($("#cfgTempHours").value) || 1;
       api().temp_password_start(h).then((r) => {
         toast(r.msg, r.ok ? "success" : "error");
-        if (r.ok) { setText($("#tempPwHint"), "生效中：" + r.password); $("#tempPwHint").classList.remove("hidden"); }
+        if (r.ok) { setText($("#tempPwHint"), t("生效中：{pw}", { pw: r.password })); $("#tempPwHint").classList.remove("hidden"); }
       });
     });
     $("#btnTempStop").addEventListener("click", () =>
@@ -604,8 +669,18 @@
         $("#tempPwHint").classList.add("hidden");
       }));
 
+    $("#btnExportCsv").addEventListener("click", () =>
+      api().export_csv().then((r) => toast(r.msg, r.ok ? "success" : "error")));
+
     $("#btnExport").addEventListener("click", () => api().export_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
     $("#btnImport").addEventListener("click", () => api().import_config().then((r) => toast(r.msg, r.ok ? "success" : "error")));
+
+    // 语言切换：立即生效（后端持久化 + 前端重载翻译），不必点保存
+    $("#cfgLang").addEventListener("change", () => {
+      api().set_language($("#cfgLang").value).then((r) => {
+        if (r.ok) window.location.reload();
+      });
+    });
 
     $("#btnSave").addEventListener("click", () => {
       api().save_config({
@@ -617,10 +692,11 @@
         start_with_windows: $("#cfgStartWin").checked,
         close_to_tray: $("#cfgCloseTray").checked,
         confirm_exit_hotspot: $("#cfgConfirmExit").checked,
-      }).then((r) => { toast(r.ok ? "设置已保存" : r.msg, r.ok ? "success" : "error"); if (r.ok) closeModal("settingsModal"); });
+        hotkey_enabled: $("#cfgHotkey").checked,
+      }).then((r) => { toast(r.ok ? t("设置已保存") : r.msg, r.ok ? "success" : "error"); if (r.ok) closeModal("settingsModal"); });
     });
     $("#btnApply").addEventListener("click", () => {
-      api().apply_now().then(() => toast("正在下发配置…", "info"));
+      api().apply_now().then(() => toast(t("正在下发配置…"), "info"));
     });
 
     const portalPatch = () => ({
@@ -635,13 +711,13 @@
       portal_schedule_end: parseInt($("#pfSchEnd").value, 10) || 24,
     });
     $("#btnPfSave").addEventListener("click", () => {
-      api().save_config(portalPatch()).then((r) => toast(r.ok ? "已保存" : r.msg, r.ok ? "success" : "error"));
+      api().save_config(portalPatch()).then((r) => toast(r.ok ? t("已保存") : r.msg, r.ok ? "success" : "error"));
     });
     $("#btnPfStart").addEventListener("click", () => {
-      api().save_config(portalPatch()).then(() => api().portal_start().then(() => toast("正在启动门户…", "info")));
+      api().save_config(portalPatch()).then(() => api().portal_start().then(() => toast(t("正在启动门户…"), "info")));
     });
     $("#btnPfStop").addEventListener("click", () => {
-      api().portal_stop().then(() => toast("门户已停止", "info"));
+      api().portal_stop().then(() => toast(t("门户已停止"), "info"));
     });
   }
 
@@ -655,10 +731,20 @@
     setTimeout(tick, 1200);
   }
 
-  function boot() {
+  async function boot() {
     initTheme();
     bind();
-    tick();
+    // 加载翻译表（en 模式非空）并翻译 index.html 里的静态文案
+    try {
+      const [dic, st] = await Promise.all([api().get_i18n(), api().get_state()]);
+      I18N = dic || {};
+      if (Object.keys(I18N).length) applyI18nStatic();
+      state = st;
+      render(st);
+      tick();
+    } catch (e) {
+      tick();   // 字典加载失败不阻塞主循环
+    }
     try { window.pywebview.api.boot_ready(); } catch (e) {}   // 上报就绪：后端据此恢复浮窗
   }
 

@@ -19,6 +19,8 @@ try:
 except ImportError:
     HAS_DEPS = False
 
+from .i18n import t
+
 
 def _icon_image():
     """64x64 的 WiFi 信号托盘图标：弧线居中放大，避免偏下显得小。"""
@@ -46,8 +48,8 @@ class TrayIcon:
         self._icon = pystray.Icon(
             "WifiHotspotManager", _icon_image(), tooltip,
             menu=pystray.Menu(
-                pystray.MenuItem("显示主界面", lambda: self._safe(on_show), default=True),
-                pystray.MenuItem("退出", lambda: self._safe(on_exit)),
+                pystray.MenuItem(lambda: t("显示主界面"), lambda: self._safe(on_show), default=True),
+                pystray.MenuItem(lambda: t("退出"), lambda: self._safe(on_exit)),
             ),
         )
 
@@ -77,7 +79,7 @@ class TrayIcon:
     def notify(self, text: str) -> None:
         if self._icon is not None:
             try:
-                self._icon.notify(text, "WiFi 热点管理器")
+                self._icon.notify(text, t("WiFi 热点管理器"))
             except Exception:
                 log.debug("托盘通知异常", exc_info=True)
 

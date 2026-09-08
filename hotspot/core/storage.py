@@ -357,6 +357,17 @@ class TrafficDB:
             out.append((d, rx, tx))
         return out
 
+    def daily_by_device(self, days: int = 30) -> List[Dict[str, Any]]:
+        """CSV 导出用：每设备每日一行 (day, mac, rx, tx)，按日期+用量排序。"""
+        start = datetime.now().date() - timedelta(days=days - 1)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT day, mac, rx, tx FROM daily WHERE day>=? ORDER BY day, (rx+tx) DESC",
+                (start.strftime("%Y-%m-%d"),),
+            ).fetchall()
+        return [{"day": r["day"], "mac": r["mac"], "rx": int(r["rx"]), "tx": int(r["tx"])}
+                for r in rows]
+
     def top_devices(self, limit: int = 8) -> List[Dict[str, Any]]:
         """用量 TOP 设备（按累计 rx+tx 降序）。"""
         with self._lock:

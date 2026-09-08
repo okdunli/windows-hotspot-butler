@@ -73,7 +73,7 @@ html[data-theme="light"] .up b{color:#9a6700}
     <div class="ring"></div>
   </div>
   <div class="info">
-    <div class="row1"><span class="n" id="n">0</span><span class="nlabel">台在线</span></div>
+    <div class="row1"><span class="n" id="n">0</span><span class="nlabel" id="nlabel">台在线</span></div>
     <div class="up" id="up">上行 ↑ <b>0 B/s</b></div>
     <div class="down" id="down">下行 ↓ <b>0 B/s</b></div>
   </div>
@@ -84,16 +84,56 @@ html[data-theme="light"] .up b{color:#9a6700}
     </svg>
   </div>
 </div>
+<div id="ctxMenu" class="ctx hidden">
+  <button data-act="toggle">⏻ <span data-t="开关热点">开关热点</span></button>
+  <button data-act="restore">🖥️ <span data-t="返回主界面">返回主界面</span></button>
+  <button data-act="close">✕ <span data-t="关闭浮窗">关闭浮窗</span></button>
+</div>
+<style>
+.ctx{position:fixed;z-index:99;min-width:110px;background:var(--bg1);
+     border:1px solid rgba(88,166,255,.3);border-radius:8px;padding:4px;
+     box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.ctx button{display:block;width:100%;text-align:left;background:none;border:0;
+            color:var(--text);font:12px "Segoe UI","Microsoft YaHei",sans-serif;
+            padding:6px 8px;border-radius:6px;cursor:pointer}
+.ctx button:hover{background:rgba(88,166,255,.16)}
+.hidden{display:none !important}
+</style>
 <script>
 const fmt = (n) => {
   let f = n, u = "B";
   for (const x of ["KB","MB","GB"]) { if (f < 1024) break; f /= 1024; u = x; }
   return (f < 10 && u !== "B" ? f.toFixed(1) : Math.round(f)) + " " + u;
 };
+// ---- i18n：从后端拉翻译表（en 模式非空，zh 模式为空表 = 中文原文） ----
+let I18N = {};
+let lastUp = 0, lastDown = 0;
+const t = (k, vars) => {
+  let s = I18N[k] || k;
+  if (vars) for (const key in vars) s = s.split("{" + key + "}").join(vars[key]);
+  return s;
+};
+// 字典到位后刷新静态文案与标题
+function applyStatic() {
+  const nl = document.getElementById("nlabel");
+  if (nl) nl.textContent = t("台在线");
+  const tg = document.getElementById("toggle");
+  if (tg) tg.title = t("点击 开/关 热点");
+  const ex = document.getElementById("expand");
+  if (ex) ex.title = t("返回主界面");
+  document.getElementById("up").innerHTML = t("上行 ↑ <b>{v}</b>", { v: fmt(lastUp) });
+  document.getElementById("down").innerHTML = t("下行 ↓ <b>{v}</b>", { v: fmt(lastDown) });
+}
+async function initI18n() {
+  try {
+    const dic = await window.pywebview.api.get_i18n();
+    if (dic && Object.keys(dic).length) { I18N = dic; applyStatic(); }
+  } catch (e) {}
+}
 async function initTheme() {
   try {
-    const t = await window.pywebview.api.get_theme();
-    document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+    const th = await window.pywebview.api.get_theme();
+    document.documentElement.setAttribute("data-theme", th === "light" ? "light" : "dark");
   } catch (e) {}
 }
 // 三态状态机：off / busy（开关过渡，~15s 超时自恢复）/ on
@@ -114,8 +154,9 @@ async function tick() {
     lastActive = active;
     document.documentElement.setAttribute("data-theme", st.theme === "light" ? "light" : "dark");
     document.getElementById("n").textContent = st.online || 0;
-    document.getElementById("down").innerHTML = "下行 ↓ <b>" + fmt(st.down || 0) + "</b>";
-    document.getElementById("up").innerHTML = "上行 ↑ <b>" + fmt(st.up || 0) + "</b>";
+    lastUp = st.up || 0; lastDown = st.down || 0;
+    document.getElementById("down").innerHTML = t("下行 ↓ <b>{v}</b>", { v: fmt(st.down || 0) });
+    document.getElementById("up").innerHTML = t("上行 ↑ <b>{v}</b>", { v: fmt(st.up || 0) });
     const busy = pendingTo !== null && active !== (pendingTo === "on")
                  && (Date.now() - busySince < 15000);  // 15s 超时兜底
     if (pendingTo !== null && (!busy || active === (pendingTo === "on"))) pendingTo = null;
@@ -145,7 +186,45 @@ window.addEventListener("mousedown", (e) => {
   if (e.target.closest(".sig") || e.target.closest(".exp")) return;
   try { window.pywebview.api.mini_drag_start(); } catch (err) {}
 });
-window.addEventListener("pywebviewready", () => { initTheme(); tick(); });
+// ---- 右键菜单：开关热点 / 回主界面 / 关闭浮窗 ----
+const ctx = document.getElementById("ctxMenu");
+document.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  ctx.classList.remove("hidden");
+  const mw = 120, mh = 96;
+  ctx.style.left = Math.min(e.clientX, window.innerWidth - mw - 4) + "px";
+  ctx.style.top = Math.min(e.clientY, window.innerHeight - mh - 4) + "px";
+});
+document.addEventListener("mousedown", (e) => {
+  if (!ctx.contains(e.target)) ctx.classList.add("hidden");
+});
+ctx.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  ctx.classList.add("hidden");
+  try {
+    if (b.dataset.act === "toggle") {
+      pendingTo = !lastActive ? "on" : "off";
+      busySince = Date.now();
+      applyState(lastActive, true);
+      window.pywebview.api.mini_toggle();
+    } else if (b.dataset.act === "restore") {
+      window.pywebview.api.mini_restore_main();
+    } else if (b.dataset.act === "close") {
+      // 记录 show=false：下次启动不再自动开浮窗
+      window.pywebview.api.mini_close_pinned();
+    }
+  } catch (err) {}
+});
+// 字典到位后翻译菜单文案
+const _origApplyStatic = applyStatic;
+applyStatic = function () {
+  _origApplyStatic();
+  document.querySelectorAll("#ctxMenu [data-t]").forEach((el) => {
+    el.textContent = t(el.dataset.t);
+  });
+};
+window.addEventListener("pywebviewready", () => { initTheme(); initI18n(); tick(); });
 </script>
 </body>
 </html>

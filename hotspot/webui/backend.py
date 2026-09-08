@@ -27,6 +27,8 @@ from ..core.portforward import PortForwarder
 from ..core.share import FileShare
 from ..core.storage import DeviceStore, TrafficDB, human_bytes, human_rate, normalize_mac
 from ..core.traffic import TrafficMonitor
+from . import i18n
+from .i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +46,7 @@ TYPE_LABEL = {
     "car": "车机", "unknown": "未知设备",
 }
 ICON_CHOICES = [(k, f"{e} {TYPE_LABEL[k]}") for k, e in TYPE_EMOJI.items()]
+# 前端拿到的 icons 文案需随语言变化 → get_state 时现场翻译
 
 BLOCK_FILE: Path = DATA_DIR / "blocked.json"
 # 网关查询结果很慢（PowerShell 约 4 秒），落地缓存，下次启动瞬间可用
@@ -60,12 +63,12 @@ def _ago(ts: float) -> str:
         return ""
     d = max(0, int(time.time() - ts))
     if d < 60:
-        return f"{d} 秒前"
+        return t("{d} 秒前", d=d)
     if d < 3600:
-        return f"{d // 60} 分钟前"
+        return t("{d} 分钟前", d=d // 60)
     if d < 86400:
-        return f"{d // 3600} 小时前"
-    return f"{d // 86400} 天前"
+        return t("{d} 小时前", d=d // 3600)
+    return t("{d} 天前", d=d // 86400)
 
 
 def _uptime(ts: float) -> str:
@@ -81,6 +84,7 @@ class HotspotBackend:
 
     def __init__(self) -> None:
         self.cfg = AppConfig.load()
+        i18n.set_lang(self.cfg.language)
         self.store = DeviceStore()
         self.db = TrafficDB()
         self.traffic = TrafficMonitor(
@@ -193,9 +197,9 @@ class HotspotBackend:
                     self.captive.revoke_ip(ip, mac)
                 except Exception:
                     pass
-                self._toast(f"已拒绝 {ip}：设备数超过上限 {maxn} 台", "error")
+                self._toast(t("已拒绝 {ip}：设备数超过上限 {n} 台", ip=ip, n=maxn), "error")
                 return
-        self._toast(f"{ip} 已通过欢迎页并开始上网", "success")
+        self._toast(t("{ip} 已通过欢迎页并开始上网", ip=ip), "success")
 
     def _on_dns_query(self, ip: str, domain: str) -> None:
         """DNS 劫持域名记录（访问日志）。"""
@@ -341,7 +345,7 @@ class HotspotBackend:
         for mac in now_online - prev_online:
             d = next((c for c in clients if c.mac == mac), None)
             if d is not None and not d.portal_accepted:
-                text = f"新设备接入：{d.name}（{d.ip or d.mac}）"
+                text = t("新设备接入：{n}（{ip}）", n=d.name, ip=d.ip or d.mac)
                 self._toast(text, "info")
                 self._tray_notify(text)
         with self._lock:
@@ -367,17 +371,17 @@ class HotspotBackend:
                 ok, msg = self.captive.start(self.cfg.portal, force_dns=True)
                 if ok:
                     self._portal_auto = True
-                    self._toast("强制门户已随热点启动（DNS 劫持生效）", "info")
+                    self._toast(t("强制门户已随热点启动（DNS 劫持生效）"), "info")
                 else:
-                    self._toast("门户启动失败：" + msg, "error")
+                    self._toast(t("门户启动失败：{m}", m=msg), "error")
             except Exception as exc:
                 log.exception("门户自动启动失败")
-                self._toast(f"门户启动失败：{exc}", "error")
+                self._toast(t("门户启动失败：{m}", m=exc), "error")
         elif not want and self.captive.running and self._portal_auto:
             try:
                 self.captive.stop()
                 self._portal_auto = False
-                self._toast("热点已关闭，强制门户已停止", "info")
+                self._toast(t("热点已关闭，强制门户已停止"), "info")
             except Exception:
                 log.debug("门户自动停止异常", exc_info=True)
 
@@ -441,6 +445,7 @@ class HotspotBackend:
                 "max_clients": self.cfg.hotspot.max_clients,
                 "start_with_windows": self.cfg.start_with_windows,
                 "close_to_tray": self.cfg.close_to_tray,
+                "hotkey_enabled": self.cfg.hotkey_enabled,
                 "portal_enabled": self.cfg.portal.enabled,
                 "portal_dns": self.cfg.portal.dns_redirect,
                 "portal_template": self.cfg.portal.template,
@@ -458,7 +463,8 @@ class HotspotBackend:
             "port_fwd": self.portfwd.list_rules(),
             "gateway": self.gateway,
             "auto_stop": self.stop_status(),
-            "icons": [{"key": k, "label": v} for k, v in ICON_CHOICES],
+            "icons": [{"key": k, "label": t(v)} for k, v in ICON_CHOICES],
+            "lang": i18n.current(),
         }
 
     # 对外：操作
@@ -466,7 +472,7 @@ class HotspotBackend:
         """把耗时操作丢进线程池，立即返回，前端通过 busy / toast 感知进度。"""
         with self._lock:
             if key in self._busy:
-                return {"ok": False, "started": False, "msg": "操作进行中，请稍候"}
+                return {"ok": False, "started": False, "msg": t("操作进行中，请稍候")}
 
         def wrapper() -> None:
             try:
@@ -477,7 +483,7 @@ class HotspotBackend:
                 self._toast(str(msg), "success" if ok else "error")
             except Exception as exc:
                 log.exception("操作失败 %s", key)
-                self._toast(f"操作失败：{exc}", "error")
+                self._toast(t("操作失败：{e}", e=exc), "error")
             finally:
                 with self._lock:
                     self._busy.pop(key, None)
@@ -570,9 +576,9 @@ class HotspotBackend:
             self.cfg.normalize()
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
-            self._toast("设置已保存", "success")
+            self._toast(t("设置已保存"), "success")
             self._pool.submit(self._apply_config)
-            return {"ok": True, "msg": "已保存"}
+            return {"ok": True, "msg": t("已保存")}
         except Exception as exc:
             log.exception("保存配置失败")
             return {"ok": False, "msg": str(exc)}
@@ -624,7 +630,7 @@ class HotspotBackend:
         try:
             self.devman.forget(mac)
             self._pool.submit(self._gather_fast)
-            return {"ok": True, "msg": "已移除设备"}
+            return {"ok": True, "msg": t("已移除设备")}
         except Exception as exc:
             return {"ok": False, "msg": str(exc)}
 
@@ -682,7 +688,7 @@ class HotspotBackend:
         self._blocked.pop(mac, None)
         self._save_blocked()
         self._pool.submit(self._gather_fast)
-        return {"ok": True, "msg": "已恢复上网"}
+        return {"ok": True, "msg": t("已恢复上网")}
 
     # 强制门户
     def portal_start(self) -> Dict[str, Any]:
@@ -709,10 +715,10 @@ class HotspotBackend:
     def portal_revoke(self, mac: str) -> Dict[str, Any]:
         dev = self.devman.get(normalize_mac(mac))
         if not dev:
-            return {"ok": False, "msg": "未找到设备"}
+            return {"ok": False, "msg": t("未找到设备")}
         self.captive.revoke_ip(dev.ip, dev.mac)
         self._pool.submit(self._gather_fast)
-        return {"ok": True, "msg": f"已取消放行 {dev.ip or dev.mac}"}
+        return {"ok": True, "msg": t("已取消放行 {ip}", ip=dev.ip or dev.mac)}
 
     # 其它
     def diagnose(self) -> Dict[str, Any]:
@@ -769,7 +775,7 @@ class HotspotBackend:
                 self._stop_timer.cancel()
                 self._stop_timer = None
         if minutes <= 0:
-            return {"ok": True, "msg": "已取消定时关闭"}
+            return {"ok": True, "msg": t("已取消定时关闭")}
         remaining = {"sec": minutes * 60}
 
         def tick() -> None:
@@ -798,7 +804,7 @@ class HotspotBackend:
             self._stop_timer = t
         t.daemon = True
         t.start()
-        return {"ok": True, "msg": f"将在 {minutes} 分钟后自动关闭热点"}
+        return {"ok": True, "msg": t("将在 {m} 分钟后自动关闭热点", m=minutes)}
 
     def stop_status(self) -> Dict[str, Any]:
         with self._lock:
@@ -836,8 +842,8 @@ class HotspotBackend:
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
             self._pool.submit(self._apply_config)
-            self._toast("临时密码已到期，已恢复原密码", "info")
-            self._tray_notify("临时密码已到期，热点密码已恢复")
+            self._toast(t("临时密码已到期，已恢复原密码"), "info")
+            self._tray_notify(t("临时密码已到期，热点密码已恢复"))
             with self._lock:
                 self._temp_timer = None
                 self._temp_deadline = 0.0
@@ -851,7 +857,8 @@ class HotspotBackend:
         self.cfg.temp_password = temp_pw
         self.cfg.temp_password_until = self._temp_deadline
         self.cfg.save()
-        return {"ok": True, "msg": f"临时密码 {temp_pw}，{hours:g} 小时后自动恢复", "password": temp_pw}
+        return {"ok": True, "msg": t("临时密码 {pw}，{h} 小时后自动恢复", pw=temp_pw, h=hours),
+                "password": temp_pw}
 
     def temp_password_stop(self) -> Dict[str, Any]:
         with self._lock:
@@ -863,7 +870,7 @@ class HotspotBackend:
             self.cfg.temp_password = ""
             self.cfg.temp_password_until = 0.0
             self.cfg.save()
-        return {"ok": True, "msg": "已取消临时密码（密码保持当前值不变）"}
+        return {"ok": True, "msg": t("已取消临时密码（密码保持当前值不变）")}
 
     def temp_password_status(self) -> Dict[str, Any]:
         with self._lock:
@@ -894,6 +901,27 @@ class HotspotBackend:
             log.exception("配置导出失败")
             return {"ok": False, "msg": str(exc)}
 
+    def export_csv(self) -> Dict[str, Any]:
+        """导出最近 30 天每设备每日流量为 CSV（UTF-8 BOM，Excel 直接打开不乱码）。"""
+        try:
+            import csv
+            rows = self.db.daily_by_device(30)
+            names = {rec["mac"]: self.store.display_name(rec) or rec["mac"]
+                     for rec in self.store.all()}
+            export_file = DATA_DIR / f"traffic-{time.strftime('%Y%m%d-%H%M%S')}.csv"
+            with open(export_file, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.writer(f)
+                w.writerow(["日期", "设备", "MAC", "下载(bytes)", "上传(bytes)", "合计(bytes)"])
+                for r in rows:
+                    w.writerow([r["day"], names.get(r["mac"], r["mac"]), r["mac"],
+                                r["rx"], r["tx"], r["rx"] + r["tx"]])
+            import os
+            os.startfile(str(DATA_DIR))  # noqa: S606
+            return {"ok": True, "msg": t("已导出到 {p}", p=export_file)}
+        except Exception as exc:
+            log.exception("CSV 导出失败")
+            return {"ok": False, "msg": str(exc)}
+
     def import_config(self) -> Dict[str, Any]:
         """弹出文件选择框选择此前导出的 JSON，恢复配置。"""
         try:
@@ -915,8 +943,8 @@ class HotspotBackend:
             self.cfg.save()
             self.controller.cfg = self.cfg.hotspot
             self._pool.submit(self._apply_config)
-            self._toast("配置已导入并下发", "success")
-            return {"ok": True, "msg": "配置已导入"}
+            self._toast(t("配置已导入并下发"), "success")
+            return {"ok": True, "msg": t("配置已导入")}
         except Exception as exc:
             log.exception("配置导入失败")
             return {"ok": False, "msg": str(exc)}
@@ -937,6 +965,20 @@ class HotspotBackend:
 
     def get_theme(self) -> str:
         return self.cfg.theme
+
+    def get_language(self) -> str:
+        return i18n.current()
+
+    def set_language(self, lang: str) -> Dict[str, Any]:
+        """切换界面语言（auto = 跟随系统），立即生效并持久化。"""
+        self.cfg.language = "auto" if lang not in ("zh_CN", "en") else lang
+        self.cfg.save()
+        i18n.set_lang(self.cfg.language)
+        return {"ok": True, "lang": i18n.current()}
+
+    def get_i18n(self) -> Dict[str, str]:
+        """把整张翻译表给前端（en 模式），zh 模式给空表（原文即中文）。"""
+        return dict(i18n.ZH2EN) if i18n.current() == "en" else {}
 
     def mini_state(self) -> Dict[str, Any]:
         """迷你浮窗专用轻量状态（只读缓存，不触发任何采集）。"""
@@ -979,12 +1021,18 @@ class HotspotBackend:
         if hasattr(self, "_open_mini") and self._open_mini:
             self._open_mini()
             return {"ok": True}
-        return {"ok": False, "msg": "悬浮窗不可用"}
+        return {"ok": False, "msg": t("悬浮窗不可用")}
 
     def close_mini(self) -> Dict[str, Any]:
         if hasattr(self, "_close_mini") and self._close_mini:
             self._close_mini()
         return {"ok": True}
+
+    def mini_close_pinned(self) -> Dict[str, Any]:
+        """右键菜单关闭浮窗：同时记录 show=False，下次启动不再自动恢复浮窗。"""
+        self.cfg.mini_window["show"] = False
+        self.cfg.save()
+        return self.close_mini()
 
     def confirm_exit(self) -> Dict[str, Any]:
         """用户已在确认弹窗点了"确认退出"，下次 close 请求放行。"""
@@ -1065,6 +1113,19 @@ class HotspotBackend:
         except Exception as exc:
             log.exception("统计报表失败")
             return {"ok": False, "msg": str(exc)}
+
+    # 网速测试
+    def speed_test(self) -> Dict[str, Any]:
+        """下载测速（Cloudflare 端点），线程池执行防阻塞界面。"""
+        from ..core.speedtest import run_speed_test
+
+        def work():
+            res = run_speed_test()
+            if res["ok"]:
+                self._toast(t("测速结果：{m}", m=res["msg"]), "success")
+            return res["ok"], res["msg"]
+
+        return self._run("speedtest", work)
 
     # 文件共享
     def share_start(self) -> Dict[str, Any]:

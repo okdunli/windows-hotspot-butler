@@ -286,6 +286,13 @@ html[data-theme="light"] .dial.on .dial-inner{
 }
 .stat-k{font-size:11px;color:var(--muted);margin-top:3px}
 
+/* 实时网速曲线（sparkline） */
+.spark-wrap{
+  width:100%;border:1px solid var(--border);border-radius:12px;
+  background:var(--panel);padding:6px 8px 2px;box-sizing:border-box;
+  transition:background .38s var(--ease),border-color .25s var(--ease);
+}
+.spark-wrap canvas{display:block;width:100%;height:72px}
 .banner{
   width:100%;font-size:12px;line-height:1.6;padding:10px 12px;border-radius:12px;
   background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:var(--red-soft);
