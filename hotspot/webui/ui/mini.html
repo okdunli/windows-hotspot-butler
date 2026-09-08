@@ -29,14 +29,17 @@ body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
   font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);
   background:linear-gradient(135deg,var(--bg1),var(--bg2));
   border:1px solid rgba(88,166,255,.28);
-  display:flex;align-items:center;padding:0 4px 0 5px;gap:4px;cursor:default;
+  display:flex;align-items:center;padding:0 4px 0 5px;gap:8px;cursor:default;
   transition:background .3s ease,color .3s ease,border-color .3s ease;
 }
 html[data-theme="light"] .card{border-color:rgba(47,111,237,.35)}
 .card.on{border-color:rgba(63,185,80,.45)}
-/* ---- 左：开关按钮（点击切换；WiFi 图标在按钮内垂直居中） ---- */
+/* ---- 左：开关按钮（点击切换；WiFi 图标在按钮内垂直居中） ----
+   视觉微调：只把 svg 上移 1.5px——WiFi 弧线在上、圆点在下，字形重心偏下；
+   按钮（含 hover 圈、ring）保持原位不动 */
 .sig{position:relative;width:36px;height:36px;flex:none;display:grid;place-items:center;
      border-radius:12px;cursor:pointer;transition:background .15s}
+.sig svg{transform:translateY(-1.5px)}
 .sig:hover{background:rgba(88,166,255,.12)}
 /* off：灰色图标；busy：主题色；on：绿色 */
 .sig svg{width:24px;height:24px;display:block;color:var(--muted);transition:color .25s}
@@ -54,10 +57,15 @@ html[data-theme="light"] .card{border-color:rgba(47,111,237,.35)}
 .n{font-size:14px;font-weight:700;color:var(--n)}
 .nlabel{font-size:9.5px;color:var(--muted)}
 .down,.up{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.down b{color:#3fb950;font-weight:600}
-.up b{color:#d29922;font-weight:600}
+.down b,.up b{font-weight:600}
+.down b{color:#3fb950}
+.up b{color:#d29922}
 html[data-theme="light"] .down b{color:#1a7f37}
 html[data-theme="light"] .up b{color:#9a6700}
+/* 热点未开启：数值全部灰色（label 本来就是灰的） */
+.card:not(.on):not(.busy) .down b,
+.card:not(.on):not(.busy) .up b,
+.card:not(.on):not(.busy) .n{color:var(--muted)}
 /* ---- 右：展开按钮 ---- */
 .exp{width:22px;height:22px;flex:none;border-radius:7px;display:grid;place-items:center;
      cursor:pointer;color:var(--muted);transition:background .15s,color .15s}
@@ -77,8 +85,8 @@ html[data-theme="light"] .up b{color:#9a6700}
   </div>
   <div class="info">
     <div class="row1"><span class="n" id="n">0</span><span class="nlabel">台在线</span></div>
-    <div class="down" id="down">↓ <b>0 B/s</b></div>
-    <div class="up" id="up">↑ <b>0 B/s</b></div>
+    <div class="up" id="up">上行 ↑ <b>0 B/s</b></div>
+    <div class="down" id="down">下行 ↓ <b>0 B/s</b></div>
   </div>
   <div class="exp" id="expand" title="返回主界面">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -117,8 +125,8 @@ async function tick() {
     lastActive = active;
     document.documentElement.setAttribute("data-theme", st.theme === "light" ? "light" : "dark");
     document.getElementById("n").textContent = st.online || 0;
-    document.getElementById("down").innerHTML = "↓ <b>" + fmt(st.down || 0) + "</b>";
-    document.getElementById("up").innerHTML = "↑ <b>" + fmt(st.up || 0) + "</b>";
+    document.getElementById("down").innerHTML = "下行 ↓ <b>" + fmt(st.down || 0) + "</b>";
+    document.getElementById("up").innerHTML = "上行 ↑ <b>" + fmt(st.up || 0) + "</b>";
     const busy = pendingTo !== null && active !== (pendingTo === "on")
                  && (Date.now() - busySince < 15000);  // 15s 超时兜底
     if (pendingTo !== null && (!busy || active === (pendingTo === "on"))) pendingTo = null;

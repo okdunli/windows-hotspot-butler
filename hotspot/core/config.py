@@ -75,6 +75,10 @@ class AppConfig:
     temp_password: str = ""             # 临时密码（空=未启用）
     temp_password_until: float = 0.0    # 临时密码到期时间戳
     window_geometry: str = ""
+    # 迷你悬浮窗状态：show=退出时开着→下次启动自动开；x/y=记录位置（物理像素）；
+    # x/y 为 -1 表示无记录（首次默认放右下角）
+    mini_window: Dict[str, Any] = field(
+        default_factory=lambda: {"show": False, "x": -1, "y": -1})
     hotspot: HotspotConfig = field(default_factory=HotspotConfig)
     portal: PortalConfig = field(default_factory=PortalConfig)
 
@@ -111,6 +115,15 @@ class AppConfig:
             cfg.hotspot = cls._coerce(HotspotConfig, data["hotspot"])
         if isinstance(data.get("portal"), dict):
             cfg.portal = cls._coerce(PortalConfig, data["portal"])
+        # mini_window 是 dict，_coerce 处理不了，手工合并（老配置缺字段→默认值）
+        mw = data.get("mini_window")
+        if isinstance(mw, dict):
+            try:
+                cfg.mini_window = {"show": bool(mw.get("show", False)),
+                                   "x": int(mw.get("x", -1)),
+                                   "y": int(mw.get("y", -1))}
+            except (TypeError, ValueError):
+                cfg.mini_window = {"show": False, "x": -1, "y": -1}
         cfg.normalize()
         return cfg
 
@@ -133,6 +146,10 @@ class AppConfig:
         self.poll_interval = max(1.0, min(30.0, float(self.poll_interval or 4.0)))
         if self.traffic_backend not in dict(TRAFFIC_CHOICES):
             self.traffic_backend = "auto"
+        mw = self.mini_window
+        mw["x"] = int(mw.get("x", -1))
+        mw["y"] = int(mw.get("y", -1))
+        mw["show"] = bool(mw.get("show", False))
 
     @classmethod
     def load(cls) -> "AppConfig":
