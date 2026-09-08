@@ -119,6 +119,10 @@ class HotspotBackend:
         self._stop = threading.Event()
         self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="whm")
         self._blocked: Dict[str, str] = self._load_blocked()
+        self._prev_online: set = set()
+        self._tray = None      # TrayIcon 实例，由 app.py 注入
+        self._stop_timer: Optional[threading.Timer] = None
+        self._stop_deadline = 0.0
         # 标记门户是否由"热点随启随停"逻辑托管；用户手动启停后改为 False，避免被自动逻辑覆盖
         self._portal_auto = False
 
@@ -162,6 +166,14 @@ class HotspotBackend:
     def _toast(self, text: str, kind: str = "info") -> None:
         with self._lock:
             self._toasts.append({"text": text, "kind": kind, "ts": time.time()})
+
+    def _tray_notify(self, text: str) -> None:
+        """托盘气泡（窗口隐藏时也能看到）。"""
+        if self._tray is not None:
+            try:
+                self._tray.notify(text)
+            except Exception:
+                log.debug("托盘通知失败", exc_info=True)
 
     def _on_portal_accept(self, ip: str, mac: str, ua: str) -> None:
         self._toast(f"{ip} 已通过欢迎页并开始上网", "success")
@@ -240,7 +252,20 @@ class HotspotBackend:
             self._sync_portal(status.active)
         except Exception:
             log.exception("门户同步异常")
+        self._update_tray_tooltip(status)
         self._gather_fast()
+
+    def _update_tray_tooltip(self, status) -> None:
+        if self._tray is None:
+            return
+        try:
+            if status.active:
+                online = sum(1 for d in self.devman.all() if d.online)
+                self._tray.set_tooltip(f"{status.ssid or '热点'} · 运行中 · 在线 {online} 台")
+            else:
+                self._tray.set_tooltip("WiFi 热点管理器 · 热点未开启")
+        except Exception:
+            log.debug("托盘提示刷新失败", exc_info=True)
 
     def _gather_fast(self) -> None:
         """快采集：ARP + 流量统计，几十毫秒，负责设备列表与速率实时更新。"""
@@ -286,6 +311,17 @@ class HotspotBackend:
             })
 
         online = sum(1 for d in clients if d.online)
+        # 新设备接入提醒：对比上一轮的在线 MAC 集合
+        now_online = {d.mac for d in clients if d.online}
+        with self._lock:
+            prev_online = self._prev_online
+            self._prev_online = now_online
+        for mac in now_online - prev_online:
+            d = next((c for c in clients if c.mac == mac), None)
+            if d is not None and not d.portal_accepted:
+                text = f"新设备接入：{d.name}（{d.ip or d.mac}）"
+                self._toast(text, "info")
+                self._tray_notify(text)
         with self._lock:
             self._snap = {
                 "ts": time.time(),
@@ -399,6 +435,7 @@ class HotspotBackend:
             },
             "portal": self.captive.status(),
             "gateway": self.gateway,
+            "auto_stop": self.stop_status(),
             "icons": [{"key": k, "label": v} for k, v in ICON_CHOICES],
         }
 
@@ -445,6 +482,11 @@ class HotspotBackend:
             self.started_at = time.time()
         if not active:
             self.started_at = 0.0
+            with self._lock:
+                if self._stop_timer is not None:
+                    self._stop_timer.cancel()
+                    self._stop_timer = None
+                self._stop_deadline = 0.0
         try:
             self._sync_portal(active)
         except Exception:
@@ -671,6 +713,88 @@ class HotspotBackend:
             return {"ok": True}
         except Exception as exc:
             return {"ok": False, "msg": str(exc)}
+
+    # --------------------------- WiFi 二维码 --------------------------- #
+    def wifi_qrcode(self) -> Dict[str, Any]:
+        """生成 WiFi 扫码连接二维码（data:image/png;base64）。
+
+        标准 WIFI: 格式（Android/iOS 11+ 相机均支持），特殊字符按规范转义。
+        """
+        try:
+            import base64
+            import io
+
+            import qrcode
+
+            def esc(s: str) -> str:
+                for a, b in (("\\", "\\\\"), (";", "\\;"), (",", "\\,"),
+                             (":", "\\:"), ('"', '\\"')):
+                    s = s.replace(a, b)
+                return s
+
+            hs = self.controller.last_status
+            ssid = hs.ssid or self.cfg.hotspot.ssid
+            passwd = "" if self.cfg.hotspot.security == "open" else (
+                hs.passphrase or self.cfg.hotspot.passphrase)
+            security = "nopass" if self.cfg.hotspot.security == "open" else "WPA"
+            payload = f'WIFI:T:{security};S:{esc(ssid)};P:{esc(passphrase)};;'
+
+            img = qrcode.make(payload, box_size=8, border=2)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            data_uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+            return {"ok": True, "data": data_uri, "ssid": ssid}
+        except ImportError:
+            return {"ok": False, "msg": "缺少 qrcode 库：pip install qrcode"}
+        except Exception as exc:
+            log.exception("二维码生成失败")
+            return {"ok": False, "msg": str(exc)}
+
+    # --------------------------- 定时关闭 ----------------------------- #
+    def schedule_stop(self, minutes: int) -> Dict[str, Any]:
+        """N 分钟后自动关闭热点；minutes<=0 取消。"""
+        with self._lock:
+            if self._stop_timer is not None:
+                self._stop_timer.cancel()
+                self._stop_timer = None
+        if minutes <= 0:
+            return {"ok": True, "msg": "已取消定时关闭"}
+        remaining = {"sec": minutes * 60}
+
+        def tick() -> None:
+            # ponytail: 简单倒计时线程，GUI 重启后定时即失效（够用，不加持久化）
+            with self._lock:
+                cur = self._stop_timer if self._stop_timer else None
+            remaining["sec"] -= 1
+            if remaining["sec"] <= 0:
+                self._toast("定时时间到，正在关闭热点…", "info")
+                self.stop()
+                with self._lock:
+                    self._stop_deadline = 0.0
+                return
+            with self._lock:
+                self._stop_deadline = time.time() + remaining["sec"]
+            t = threading.Timer(1.0, tick)
+            with self._lock:
+                self._stop_timer = t
+            t.daemon = True
+            t.start()
+
+        with self._lock:
+            self._stop_deadline = time.time() + minutes * 60
+        t = threading.Timer(1.0, tick)
+        with self._lock:
+            self._stop_timer = t
+        t.daemon = True
+        t.start()
+        return {"ok": True, "msg": f"将在 {minutes} 分钟后自动关闭热点"}
+
+    def stop_status(self) -> Dict[str, Any]:
+        with self._lock:
+            dl = self._stop_deadline
+        if not dl or dl < time.time():
+            return {"remaining": 0}
+        return {"remaining": int(dl - time.time())}
 
     def minimize(self) -> Dict[str, Any]:
         if self._window:

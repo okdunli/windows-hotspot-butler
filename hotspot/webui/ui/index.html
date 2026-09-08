@@ -53,6 +53,7 @@
 
     <div class="status-line">
       <span id="statusPill" class="pill">未开启</span>
+      <span id="autoStopText" class="muted small hidden"></span>
       <span id="uptimeText" class="muted small"></span>
       <span id="backendText" class="muted small"></span>
     </div>
@@ -67,6 +68,7 @@
       <div class="cred-row">
         <span class="cred-k">密码</span>
         <span id="passText" class="cred-v mono">••••••••</span>
+        <button id="btnQr" class="mini" title="扫码连接">🔗</button>
         <button id="togglePass" class="mini" title="显示/隐藏">👁</button>
         <button id="copyPass" class="mini" title="复制">📋</button>
       </div>
@@ -165,6 +167,23 @@
         <input id="cfgCloseTray" type="checkbox" class="switch">
         <span>关闭时最小化到托盘（需 pip install pystray pillow）</span>
       </label>
+      <div class="field-row">
+        <div class="field">
+          <label>定时关闭热点（分钟，0=取消）</label>
+          <select id="cfgAutoStop">
+            <option value="0">不定时</option>
+            <option value="15">15 分钟</option>
+            <option value="30">30 分钟</option>
+            <option value="60">1 小时</option>
+            <option value="120">2 小时</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>　</label>
+          <button id="btnAutoStop" class="btn ghost">应用定时</button>
+        </div>
+      </div>
+      <div id="autoStopHint" class="hint hidden"></div>
       <div class="modal-foot">
         <button id="btnApply" class="btn ghost">立即下发配置</button>
         <button id="btnSave" class="btn primary">保存</button>
@@ -236,6 +255,17 @@
         <button id="promptCancel" class="btn ghost">取消</button>
         <button id="promptOk" class="btn primary">确定</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- WiFi 二维码 -->
+<div id="qrModal" class="modal hidden">
+  <div class="modal-card small">
+    <div class="modal-head"><h3>🔗 扫码连接</h3><button class="icon-btn" data-close="qrModal">✕</button></div>
+    <div class="modal-body" style="align-items:center;text-align:center">
+      <img id="qrImage" alt="WiFi 二维码" style="width:220px;height:220px;border-radius:12px;background:#fff;padding:8px">
+      <div class="hint">用手机相机扫码即可连接此热点，无需手动输入密码</div>
     </div>
   </div>
 </div>

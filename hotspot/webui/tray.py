@@ -80,3 +80,10 @@ class TrayIcon:
                 self._icon.notify(text, "WiFi 热点管理器")
             except Exception:
                 log.debug("托盘通知异常", exc_info=True)
+
+    def set_tooltip(self, text: str) -> None:
+        if self._icon is not None:
+            try:
+                self._icon.title = text
+            except Exception:
+                log.debug("托盘提示更新失败", exc_info=True)

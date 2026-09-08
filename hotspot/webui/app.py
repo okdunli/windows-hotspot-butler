@@ -66,13 +66,13 @@ def main(argv: list | None = None) -> int:
         easy_drag=True,
         background_color="#0b0e14",
     )
-    api.attach_window(window)
-
     # ---- 托盘（close_to_tray 开启时：关闭窗口 = 隐藏到托盘） ----
     tray = TrayIcon(
         on_show=lambda: (window.show(), window.restore()),
         on_exit=lambda: (tray.stop(), window.destroy()),
     )
+    api.attach_window(window)
+    api._tray = tray
 
     def _on_closing() -> bool:
         """窗口关闭请求：close_to_tray 开启且托盘可用 → 隐藏窗口、常驻托盘。"""

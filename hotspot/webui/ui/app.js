@@ -126,6 +126,17 @@
     setText($("#uptimeText"), hs.max_clients ? "上限 " + hs.max_clients + " 台" : "");
     setText($("#backendText"), hs.backend_label || "");
 
+    // 定时关闭倒计时（显示在状态行）
+    const remain = (st.auto_stop || {}).remaining || 0;
+    const stopEl = $("#autoStopText");
+    if (remain > 0) {
+      const mm = Math.floor(remain / 60), ss = remain % 60;
+      setText(stopEl, "⏱ " + mm + ":" + String(ss).padStart(2, "0") + " 后关闭");
+      stopEl.classList.remove("hidden");
+    } else {
+      stopEl.classList.add("hidden");
+    }
+
     // --- 凭据 ---
     setText($("#ssidText"), hs.ssid || "—");
     setText($("#passText"), passShown ? (hs.passphrase || "") : "••••••••");
@@ -348,6 +359,24 @@
 
     // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
+
+    // WiFi 二维码
+    $("#btnQr").addEventListener("click", () => {
+      api().wifi_qrcode().then((r) => {
+        if (r.ok) {
+          $("#qrImage").src = r.data;
+          openModal("qrModal");
+        } else {
+          toast(r.msg, "error");
+        }
+      });
+    });
+
+    // 定时关闭
+    $("#btnAutoStop").addEventListener("click", () => {
+      const m = parseInt($("#cfgAutoStop").value, 10) || 0;
+      api().schedule_stop(m).then((r) => toast(r.msg, r.ok ? "success" : "error"));
+    });
     // 圆盘
     $("#dial").addEventListener("click", (ev) => {
       if (busy) return;
