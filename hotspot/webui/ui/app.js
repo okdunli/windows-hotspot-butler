@@ -67,13 +67,22 @@
     try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* 忽略 */ }
     applyTheme(saved === "light" ? "light" : "dark");
   }
-  function toggleTheme() {
+  function toggleTheme(ev) {
     const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
     const next = cur === "light" ? "dark" : "light";
     const root = document.documentElement;
-    root.classList.add("theme-anim");           // 平滑过渡
-    applyTheme(next);
-    setTimeout(() => root.classList.remove("theme-anim"), 420);
+    // 圆形擦除转场：从点击位置扩散新主题色
+    const wipe = document.createElement("div");
+    wipe.className = "theme-wipe";
+    const r = (ev && ev.currentTarget) ? ev.currentTarget.getBoundingClientRect() : null;
+    const x = r ? (r.left + r.width / 2) : window.innerWidth / 2;
+    const y = r ? (r.top + r.height / 2) : window.innerHeight / 2;
+    wipe.style.setProperty("--wx", x + "px");
+    wipe.style.setProperty("--wy", y + "px");
+    wipe.style.setProperty("--wipe-color", next === "light" ? "#eef1f6" : "#0b0e14");
+    document.body.appendChild(wipe);
+    setTimeout(() => applyTheme(next), 260);        // 擦除过半时切换
+    setTimeout(() => { wipe.remove(); root.classList.add("theme-anim"); setTimeout(() => root.classList.remove("theme-anim"), 420); }, 560);
   }
 
   /* 数值变化时的闪动反馈 */
@@ -268,10 +277,21 @@
     menu.style.top = top + "px";
   }
 
-  function closeMenu() { $("#devMenu").classList.add("hidden"); menuMac = null; }
+  function closeMenu() {
+    const menu = $("#devMenu");
+    if (menu.classList.contains("hidden")) return;
+    menu.classList.add("closing");
+    setTimeout(() => { menu.classList.add("hidden"); menu.classList.remove("closing"); }, 170);
+    menuMac = null;
+  }
 
-  function openModal(id) { $("#" + id).classList.remove("hidden"); }
-  function closeModal(id) { $("#" + id).classList.add("hidden"); }
+  function openModal(id) { $("#" + id).classList.remove("hidden", "closing"); }
+  function closeModal(id) {
+    const m = $("#" + id);
+    if (m.classList.contains("hidden")) return;
+    m.classList.add("closing");
+    setTimeout(() => { m.classList.add("hidden"); m.classList.remove("closing"); }, 190);
+  }
 
   let promptResolve = null;
   function promptText(title, value) {
@@ -320,7 +340,6 @@
 
     // 主题
     $("#btnTheme").addEventListener("click", toggleTheme);
-
     // 圆盘
     $("#dial").addEventListener("click", (ev) => {
       if (busy) return;
@@ -361,10 +380,10 @@
     // 模态关闭
     $$("[data-close]").forEach((b) => b.addEventListener("click", () => closeModal(b.dataset.close)));
     $$(".modal").forEach((m) => m.addEventListener("mousedown", (ev) => {
-      if (ev.target === m) m.classList.add("hidden");
+      if (ev.target === m) closeModal(m.id);
     }));
     document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") { closeMenu(); $$(".modal").forEach((m) => m.classList.add("hidden")); }
+      if (ev.key === "Escape") { closeMenu(); $$(".modal").forEach((m) => closeModal(m.id)); }
     });
     document.addEventListener("mousedown", (ev) => {
       const menu = $("#devMenu");

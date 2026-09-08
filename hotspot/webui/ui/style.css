@@ -393,7 +393,9 @@ html[data-theme="light"] .banner{color:var(--red-soft);background:rgba(229,72,77
   animation:menuIn .2s var(--spring) both;
   transform-origin:top right;
 }
+.menu.closing{animation:menuOut .16s var(--ease) forwards}
 @keyframes menuIn{from{opacity:0;transform:scale(.9) translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes menuOut{to{opacity:0;transform:scale(.92) translateY(-6px)}}
 .menu-head{font-size:11.5px;color:var(--muted);padding:6px 10px 8px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px}
 .menu-item{
@@ -418,7 +420,20 @@ html[data-theme="light"] .banner{color:var(--red-soft);background:rgba(229,72,77
   animation:fade .22s var(--ease) both;
 }
 html[data-theme="light"] .modal{background:rgba(120,135,160,.32)}
+.modal.closing{animation:modalOut .18s var(--ease) forwards}
+.modal.closing .modal-card{animation:cardOut .18s var(--ease) forwards}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes modalOut{to{opacity:0}}
+@keyframes cardOut{to{opacity:0;transform:scale(.94) translateY(10px)}}
+
+/* 主题切换：全屏圆形擦除 */
+.theme-wipe{
+  position:fixed;inset:0;z-index:200;pointer-events:none;
+  clip-path:circle(0px at var(--wx,50%) var(--wy,50%));
+  background:var(--wipe-color,#0b0e14);
+  animation:wipe .55s var(--ease) forwards;
+}
+@keyframes wipe{to{clip-path:circle(150% at var(--wx,50%) var(--wy,50%))}}
 .modal-card{
   width:min(560px,92vw);max-height:86vh;overflow:hidden;
   background:linear-gradient(180deg,var(--modal-grad-a),var(--modal-grad-b));
