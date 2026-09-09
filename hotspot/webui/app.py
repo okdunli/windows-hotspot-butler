@@ -56,6 +56,7 @@ def main(argv: list | None = None) -> int:
     from .backend import HotspotBackend
     from .tray import TrayIcon
     from .hotkey import start_global_hotkey
+    from .i18n import t
 
     _dpi_aware()
     api = HotspotBackend()
@@ -66,7 +67,7 @@ def main(argv: list | None = None) -> int:
         start_global_hotkey(lambda: api.toggle())
 
     window = webview.create_window(
-        title="WiFi 热点管理器",
+        title=t("WiFi 热点管理器"),
         url=INDEX_FILE.as_uri(),
         js_api=api,
         width=1000,
@@ -112,6 +113,8 @@ def main(argv: list | None = None) -> int:
     def _apply_mini_style(w, theme: str = "dark") -> None:
         """WebView2 COM 属性必须投递到 UI 线程设置（后台线程直接调
         会抛 CoreWebView2Controller members can only be accessed from the UI thread）。"""
+        if w is None:
+            return
 
         def work() -> None:
             try:
@@ -143,13 +146,23 @@ def main(argv: list | None = None) -> int:
                         user32 = ctypes.windll.user32
                         gdi32 = ctypes.windll.gdi32
                         hwnd = int(form.Handle.ToInt64())
-                        # 浮窗不进任务栏：加 WS_EX_TOOLWINDOW 扩展样式。
+                        # 浮窗不进任务栏：加 WS_EX_TOOLWINDOW 同时必须清掉
+                        # WS_EX_APPWINDOW——pywebview 的 WinForms 窗口默认
+                        # ShowInTaskbar=True → 带 APPWINDOW，该位优先级高于
+                        # TOOLWINDOW，不清掉的话点一下窗口按钮又回来了。
                         # 不能用 form.ShowInTaskbar=False——运行时改会重建窗口句柄，
                         # 把正在进行的 WebView2 控制器初始化连根拔掉（E_ABORT 黑屏）。
                         try:
-                            GWL_EXSTYLE, WS_EX_TOOLWINDOW = -20, 0x80
+                            GWL_EXSTYLE = -20
+                            WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = 0x80, 0x40000
                             ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW)
+                            user32.SetWindowLongW(
+                                hwnd, GWL_EXSTYLE,
+                                (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW)
+                            # 关键：窗口已显示后改扩展样式，任务栏按钮不会自动消失，
+                            # 必须隐藏再显示一次才刷新。SW_SHOWNOACTIVATE 不抢焦点。
+                            form.Hide()
+                            user32.ShowWindow(hwnd, 4)   # SW_SHOWNOACTIVATE
                         except Exception:
                             pass
                         try:
@@ -345,8 +358,7 @@ def main(argv: list | None = None) -> int:
         if not getattr(api, "_boot_mini_pending", False):
             return
         api._boot_mini_pending = False
-        threading.Timer(0.5, open_mini).start()
-        threading.Timer(2.0, window.hide).start()   # 浮窗落定后再藏主窗
+        threading.Timer(0.5, open_mini).start()   # 主窗保持显示，浮窗悬浮在旁
     api._boot_ready = _boot_ready_impl
     if getattr(api, "_boot_mini_pending", False):
         # 保底：前端 15s 内没上报（加载失败/异常）→ 放弃恢复，主窗照常显示
@@ -392,8 +404,7 @@ def main(argv: list | None = None) -> int:
 
     def _on_closed() -> None:
         """主窗口真正销毁后：后端与托盘收尾。
-        注意：不关闭悬浮窗——用户点 btnMini 的 JS 链是 open_mini 后 hide 主窗，
-        悬浮窗必须继续存活（数据采集线程也保留）；真正退出走托盘菜单。
+        主窗与浮窗现在并存（打开浮窗不藏主窗）；真正退出走托盘菜单。
         退出前记录悬浮窗状态（show/位置），下次启动自动恢复。"""
         _record_mini_state(True)
         api.shutdown()

@@ -317,7 +317,7 @@ class HotspotBackend:
                 "ip": d.ip,
                 "name": d.name,
                 "hostname": d.hostname,
-                "vendor": d.vendor,
+                "vendor": t(d.vendor) if d.vendor else "",
                 "type": d.dev_type,
                 "emoji": TYPE_EMOJI.get(d.dev_type, "📶"),
                 "type_label": TYPE_LABEL.get(d.dev_type, "未知设备"),
@@ -414,7 +414,7 @@ class HotspotBackend:
                 "passphrase": st.passphrase or self.cfg.hotspot.passphrase,
                 "band": st.band,
                 "backend": st.backend,
-                "backend_label": self.controller.backend_label,
+                "backend_label": t(self.controller.backend_label),
                 "client_count": st.client_count,
                 "max_clients": st.max_clients,
                 "message": st.message,
@@ -958,7 +958,7 @@ class HotspotBackend:
             styler = getattr(self, "_mini_style", None)
             if styler:
                 try:
-                    styler(self._mini_window, theme)
+                    styler(getattr(self, "_mini_window", None), theme)
                 except Exception:
                     log.debug("浮窗底色跟随主题失败", exc_info=True)
         return {"ok": True}
@@ -970,10 +970,31 @@ class HotspotBackend:
         return i18n.current()
 
     def set_language(self, lang: str) -> Dict[str, Any]:
-        """切换界面语言（auto = 跟随系统），立即生效并持久化。"""
+        """切换界面语言（auto = 跟随系统），立即生效并持久化。
+        前端页面由前端自己 reload；本方法负责原生部分：主窗标题、浮窗重载、托盘重建。"""
         self.cfg.language = "auto" if lang not in ("zh_CN", "en") else lang
         self.cfg.save()
         i18n.set_lang(self.cfg.language)
+
+        def refresh_native() -> None:
+            # 1) 主窗标题
+            if self._window:
+                try:
+                    self._window.set_title(t("WiFi 热点管理器"))
+                except Exception:
+                    log.debug("主窗标题切换失败", exc_info=True)
+            # 2) 托盘重建（pystray 菜单文案在构建时快照，只能重建）
+            tray = self._tray
+            if tray is not None:
+                try:
+                    tray.rebuild()
+                except Exception:
+                    log.debug("托盘重建失败", exc_info=True)
+            # 3) 悬浮窗：不在 Python 侧重载页面（load_url 会清 _pywebviewready 事件，
+            #    导致浮窗轮询 evaluate_js 阻塞 20s 后抛 Main window failed to start）。
+            #    浮窗 JS 轮询 mini_state 时发现 lang 变化，自己重拉翻译表。
+
+        threading.Thread(target=refresh_native, daemon=True).start()
         return {"ok": True, "lang": i18n.current()}
 
     def get_i18n(self) -> Dict[str, str]:
@@ -988,7 +1009,7 @@ class HotspotBackend:
         stats = snap.get("stats", {})
         return {"active": bool(st.active), "online": stats.get("online", 0),
                 "down": stats.get("down", 0), "up": stats.get("up", 0),
-                "theme": self.cfg.theme}
+                "theme": self.cfg.theme, "lang": i18n.current()}
 
     def mini_toggle(self) -> Dict[str, Any]:
         return self.toggle()
@@ -1006,14 +1027,13 @@ class HotspotBackend:
             return {"ok": False}
 
     def mini_restore_main(self) -> Dict[str, Any]:
-        """迷你浮窗右键：显示主窗口、关闭浮窗。"""
+        """浮窗"回主界面"：主窗与浮窗并存，只把主窗带到前台（浮窗保留）。"""
         if self._window:
             try:
                 self._window.show()
                 self._window.restore()
             except Exception:
                 pass
-        self.close_mini()
         return {"ok": True}
 
     def open_mini(self) -> Dict[str, Any]:
@@ -1052,8 +1072,8 @@ class HotspotBackend:
         return {"ok": True}
 
     def hide_main(self) -> Dict[str, Any]:
-        """打开悬浮窗后藏起主窗口（不销毁：后端/托盘/采集线程全部保留）。
-        恢复走 mini_restore_main() → show()。"""
+        """隐藏主窗口（保留后端/托盘/采集线程）。当前前端不再调用，
+        保留 API 以备将来使用（托盘恢复走 window.show()）。"""
         if self._window:
             try:
                 self._window.hide()

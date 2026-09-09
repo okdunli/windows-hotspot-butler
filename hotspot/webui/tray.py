@@ -38,18 +38,26 @@ class TrayIcon:
     """托盘图标。show/hide 通过回调驱动主窗口（pywebview 线程安全封装见 app.py）。"""
 
     def __init__(self, on_show: Callable[[], None], on_exit: Callable[[], None],
-                 tooltip: str = "WiFi 热点管理器") -> None:
+                 tooltip: str = "") -> None:
         self._on_show = on_show
         self._on_exit = on_exit
+        self._tooltip = tooltip
         self._icon: Optional["pystray.Icon"] = None
         if not HAS_DEPS:
             log.info("pystray/Pillow 未安装，托盘功能不可用（pip install pystray pillow）")
             return
+        self._build()
+
+    def _build(self) -> None:
+        """构建 pystray 图标（菜单文案此刻快照；切语言后需 rebuild()）。"""
         self._icon = pystray.Icon(
-            "WifiHotspotManager", _icon_image(), tooltip,
+            "WifiHotspotManager", _icon_image(), self._tooltip or t("WiFi 热点管理器"),
             menu=pystray.Menu(
-                pystray.MenuItem(lambda: t("显示主界面"), lambda: self._safe(on_show), default=True),
-                pystray.MenuItem(lambda: t("退出"), lambda: self._safe(on_exit)),
+                # pystray 动态文案 lambda 会收到菜单项自身作第一个参数，必须接收
+                pystray.MenuItem(lambda item: t("显示主界面"),
+                                 lambda: self._safe(self._on_show), default=True),
+                pystray.MenuItem(lambda item: t("退出"),
+                                 lambda: self._safe(self._on_exit)),
             ),
         )
 
@@ -75,6 +83,21 @@ class TrayIcon:
             except Exception:
                 log.debug("托盘停止异常", exc_info=True)
             self._icon = None
+
+    def rebuild(self) -> None:
+        """切语言后重建托盘：旧图标销毁（图标从托盘区消失再重画），
+        用当前 t() 文案重新构建并启动。文案是构建时快照，无法原地更新。"""
+        if not HAS_DEPS:
+            return
+        old = self._icon
+        self._icon = None
+        if old is not None:
+            try:
+                old.stop()
+            except Exception:
+                log.debug("旧托盘停止异常", exc_info=True)
+        self._build()
+        self.start()
 
     def notify(self, text: str) -> None:
         if self._icon is not None:

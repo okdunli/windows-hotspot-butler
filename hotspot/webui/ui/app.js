@@ -20,8 +20,12 @@
     return s;
   };
 
-  /* 静态文案批量翻译：叶子文本节点 / title / placeholder 按原文查表 */
+  /* 静态文案批量翻译：叶子文本节点 / title / placeholder / data-i18n 标记 */
   function applyI18nStatic() {
+    $$("[data-i18n]").forEach((el) => {
+      const v = I18N[el.dataset.i18n];
+      if (v) el.textContent = v;
+    });
     $$("body *").forEach((el) => {
       if (el.children.length === 0 && el.textContent && I18N[el.textContent.trim()]) {
         el.textContent = I18N[el.textContent.trim()];
@@ -522,10 +526,8 @@
 
     $("#btnTheme").addEventListener("click", toggleTheme);
 
-    // 藏主窗而非 destroy：destroy 会连带 shutdown 杀掉浮窗
-    $("#btnMini").addEventListener("click", () => {
-      api().open_mini().then(() => api().hide_main());
-    });
+    // 打开悬浮窗，主窗口保持显示（悬浮窗 on_top 悬浮在旁）
+    $("#btnMini").addEventListener("click", () => api().open_mini());
 
     $("#btnStats").addEventListener("click", () => {
       openModal("statsModal");

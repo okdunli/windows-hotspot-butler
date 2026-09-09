@@ -272,6 +272,19 @@ ZH2EN: Dict[str, str] = {
     "智能家居": "Smart home",
     "车机": "Car",
     "未知设备": "Unknown device",
+
+    # ---- 厂商 / 网卡特征（vendor / OUI）----
+    "随机化 MAC 设备": "Randomized MAC device",
+    "移动热点 (WinRT)": "Mobile hotspot (WinRT)",
+    "承载网络 (netsh)": "Hosted network (netsh)",
+
+    # ---- 标题栏按钮 title ----
+    "切换浅色/深色": "Toggle light/dark theme",
+    "统计": "Stats",
+    "工具箱": "Toolbox",
+    "迷你悬浮窗": "Mini floating window",
+    "最小化": "Minimize",
+    "关闭": "Close",
 }
 
 _current = "zh_CN"
