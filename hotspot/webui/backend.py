@@ -406,6 +406,8 @@ class HotspotBackend:
             "admin": pshell.is_admin(),
             "busy": bool(busy),
             "toasts": toasts,
+            "mini_shown": bool(getattr(self, "_mini_window", None) is not None
+                               or self.cfg.mini_window.get("show")),
             "hotspot": {
                 "active": bool(st.active),
                 "state": st.state,
@@ -1049,10 +1051,28 @@ class HotspotBackend:
         return {"ok": True}
 
     def mini_close_pinned(self) -> Dict[str, Any]:
-        """右键菜单关闭浮窗：同时记录 show=False，下次启动不再自动恢复浮窗。"""
+        """关闭浮窗并记录 show=False，下次启动不再自动恢复。"""
         self.cfg.mini_window["show"] = False
         self.cfg.save()
         return self.close_mini()
+
+    def toggle_mini(self) -> Dict[str, Any]:
+        """主窗"迷你悬浮窗"按钮：浮窗开着 → 关闭并记住；没开 → 打开。
+        shown 表示操作后浮窗是否可见（前端据此更新按钮高亮）。"""
+        fn = getattr(self, "_toggle_mini", None)
+        if fn:
+            try:
+                return fn()
+            except Exception:
+                log.debug("切换浮窗失败", exc_info=True)
+                return {"ok": False, "shown": False}
+        # app.py 未挂载回调（如测试环境）：走纯 backend 兜底
+        if getattr(self, "_mini_window", None) is not None:
+            self.cfg.mini_window["show"] = False
+            self.cfg.save()
+            self.close_mini()
+            return {"ok": True, "shown": False}
+        return self.open_mini() or {"ok": True, "shown": True}
 
     def confirm_exit(self) -> Dict[str, Any]:
         """用户已在确认弹窗点了"确认退出"，下次 close 请求放行。"""

@@ -348,8 +348,24 @@ def main(argv: list | None = None) -> int:
             except Exception:
                 pass
             mini_holder["win"] = None
+        api._mini_window = None   # get_state 的 mini_shown 依赖此字段判断浮窗可见性
     api._open_mini = open_mini
     api._close_mini = close_mini
+
+    def _toggle_mini_impl() -> dict:
+        """主窗"迷你悬浮窗"按钮：开↔关。关闭时记录 show=False（下次启动不再自动恢复）；
+        打开时记录 show=True。open_mini 内部对已存在的浮窗只做 show，不会重复创建。"""
+        shown = mini_holder["win"] is not None
+        if shown:
+            cfg.mini_window["show"] = False
+            cfg.save()
+            close_mini()
+            return {"ok": True, "shown": False}
+        cfg.mini_window["show"] = True
+        cfg.save()
+        open_mini()
+        return {"ok": True, "shown": True}
+    api._toggle_mini = _toggle_mini_impl
 
     # 启动恢复浮窗的接应点：主窗前端 boot() 调 backend.boot_ready() 时触发。
     # 这与"手动点按钮"的前置条件一致（主窗 JS 活跃 → WebView2 初始化完毕），

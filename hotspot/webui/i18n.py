@@ -84,6 +84,10 @@ ZH2EN: Dict[str, str] = {
     "开机自启": "Run at startup",
     "关闭时最小化到托盘": "Minimize to tray on close",
     "退出时热点开启中 → 提醒确认": "Confirm before exit while hotspot is on",
+
+    # ---- 托盘菜单 ----
+    "显示主界面": "Show main window",
+    "退出": "Exit",
     "全局热键 Ctrl+Alt+H 开关热点": "Global hotkey Ctrl+Alt+H toggles hotspot",
     "临时密码（到期自动恢复原密码）": "Temp password (auto-restored on expiry)",
     "1 小时": "1 hour",
@@ -102,6 +106,7 @@ ZH2EN: Dict[str, str] = {
     "30 分钟": "30 min",
     "应用定时": "Apply",
     "立即下发配置": "Apply now",
+    "正在下发配置…": "Applying configuration…",
     "保存": "Save",
     "语言": "Language",
     "跟随系统": "System",

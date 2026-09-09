@@ -90,6 +90,10 @@
     try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* 忽略 */ }
     applyTheme(saved === "light" ? "light" : "dark");
   }
+  /* 浮窗开关按钮高亮：浮窗可见时按钮亮起（accent 底色） */
+  function setMiniBtnOn(on) {
+    setClass($("#btnMini"), "on", on);
+  }
   function toggleTheme(ev) {
     const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
     const next = cur === "light" ? "dark" : "light";
@@ -130,6 +134,7 @@
   function render(st) {
     state = st;
     busy = !!st.busy;
+    setMiniBtnOn(!!st.mini_shown);   // 浮窗开关按钮高亮跟随真实状态
 
       const dial = $("#dial");
     const hs = st.hotspot || {};
@@ -526,8 +531,10 @@
 
     $("#btnTheme").addEventListener("click", toggleTheme);
 
-    // 打开悬浮窗，主窗口保持显示（悬浮窗 on_top 悬浮在旁）
-    $("#btnMini").addEventListener("click", () => api().open_mini());
+    // 迷你悬浮窗按钮 = 开关：浮窗开着点击关闭，没开点击打开；shown 高亮按钮
+    $("#btnMini").addEventListener("click", () => {
+      api().toggle_mini().then((r) => setMiniBtnOn(!!(r && r.shown)));
+    });
 
     $("#btnStats").addEventListener("click", () => {
       openModal("statsModal");
