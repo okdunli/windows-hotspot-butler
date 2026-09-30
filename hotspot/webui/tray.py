@@ -23,15 +23,28 @@ from .i18n import t
 
 
 def _icon_image():
-    """64x64 的 WiFi 信号托盘图标：弧线居中放大，避免偏下显得小。"""
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    cx, cy = 32, 42          # 圆心（顶点/圆点位置），弧线向上展开
-    for r in (12, 24, 36):   # 三道弧，最外圈几乎顶满画布
-        bbox = [cx - r, cy - r, cx + r, cy + r]
-        d.arc(bbox, start=225, end=315, fill=(88, 166, 255, 255), width=7)
-    d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(88, 166, 255, 255))
-    return img
+    """托盘图标：优先加载设计的盾牌 WiFi 图标（SVG 渲染的 PNG，缩放到 64×64）。
+    Pillow 不可用或 PNG 缺失时，回退到原有的纯 WiFi 手绘。"""
+    png = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
+    if HAS_DEPS and png.exists():
+        try:
+            img = Image.open(png).convert("RGBA")
+            if img.size != (64, 64):
+                img = img.resize((64, 64), Image.LANCZOS)
+            return img
+        except Exception:
+            log.debug("加载图标 PNG 失败，回退到手绘 WiFi", exc_info=True)
+    if HAS_DEPS:
+        # 回退：64x64 的 WiFi 信号托盘图标，弧线居中放大，避免偏下显得小。
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx, cy = 32, 42          # 圆心（顶点/圆点位置），弧线向上展开
+        for r in (12, 24, 36):   # 三道弧，最外圈几乎顶满画布
+            bbox = [cx - r, cy - r, cx + r, cy + r]
+            d.arc(bbox, start=225, end=315, fill=(88, 166, 255, 255), width=7)
+        d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(88, 166, 255, 255))
+        return img
+    return None
 
 
 class TrayIcon:

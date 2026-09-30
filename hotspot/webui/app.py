@@ -15,6 +15,8 @@ import ctypes.wintypes  # noqa: F401  (圆角 Region 用)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 INDEX_FILE = UI_DIR / "index.html"
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"  # hotspot/assets
+ICON_ICO = ASSETS_DIR / "icon.ico"
 
 
 def _dpi_aware() -> None:
@@ -430,7 +432,7 @@ def main(argv: list | None = None) -> int:
     window.events.closed += _on_closed
     tray.start()        # 常驻启动；是否隐藏到托盘由 _on_closing 按配置判断
     log.info("界面已启动")
-    webview.start(debug=args.debug)
+    webview.start(debug=args.debug, icon=str(ICON_ICO))
     try:
         tray.stop()   # 兜底销毁，防托盘图标残留
     except Exception:
