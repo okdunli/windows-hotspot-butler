@@ -262,6 +262,9 @@ html[data-theme="light"] .dial.on .dial-inner{
 .cred-k{font-size:12px;color:var(--muted);width:34px;flex:0 0 34px}
 .cred-v{flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cred-div{height:1px;background:var(--border);margin:0 -12px}
+.pass-click{cursor:pointer;user-select:none;-webkit-user-select:none}
+.pass-click:hover{opacity:.82}
+.cred-hint{margin:6px 2px 0;text-align:center}
 .mini{
   width:26px;height:26px;border-radius:7px;font-size:12px;color:var(--muted);
   transition:background .18s var(--ease),color .18s var(--ease),transform .28s var(--spring);
