@@ -599,6 +599,17 @@
       setText($("#passText"), passShown ? ((state.hotspot || {}).passphrase || "") : "••••••••");
     });
 
+    /* 密码区交互：左键显示/隐藏，右键复制 */
+    const passEl = $("#passText");
+    passEl.addEventListener("click", () => {
+      passShown = !passShown;
+      setText(passEl, passShown ? ((state.hotspot || {}).passphrase || "") : "••••••••");
+    });
+    passEl.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      copy((state.hotspot || {}).passphrase || "");
+    });
+
     $("#btnRefresh").addEventListener("click", () => api().refresh());
     $("#btnSettings").addEventListener("click", () => { fillSettings(); openModal("settingsModal"); });
     $("#btnPortal").addEventListener("click", () => { fillPortal(); openModal("portalModal"); });

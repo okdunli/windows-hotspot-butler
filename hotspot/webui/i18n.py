@@ -30,6 +30,8 @@ ZH2EN: Dict[str, str] = {
     "复制": "Copy",
     "扫码连接": "Scan to connect",
     "显示/隐藏": "Show/Hide",
+    "左键显示/隐藏 · 右键复制": "Left-click: show/hide · Right-click: copy",
+    "密码区：左键显示/隐藏，右键复制": "Password area: left-click to show/hide, right-click to copy",
     "在线": "Online",
     "下行": "Down",
     "上行": "Up",

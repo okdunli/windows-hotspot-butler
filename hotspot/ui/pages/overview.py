@@ -37,8 +37,23 @@ class OverviewPage(Page):
         self.state_sub = ttk.Label(self.status_card.body, text="", style="Muted.TLabel")
         self.state_sub.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
+        # ---------- WiFi 密码（左键显示/隐藏，右键复制） ----------
+        self._pw_visible = False
+        pw_row = ttk.Frame(self.status_card.body, style="Surface.TFrame")
+        pw_row.grid(row=2, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(pw_row, text="WiFi 密码", style="Muted.TLabel").pack(side="left")
+        self.pw_label = tk.Label(pw_row, text="••••••••", bg=self.p.surface, fg=self.p.text,
+                                 font=("Microsoft YaHei UI", 11, "bold"), cursor="hand2")
+        self.pw_label.pack(side="left", padx=(10, 0))
+        pw_hint = ttk.Label(pw_row, text="左键显示/隐藏 · 右键复制", style="Dim.TLabel",
+                            cursor="hand2")
+        pw_hint.pack(side="left", padx=(10, 0))
+        for w in (pw_row, self.pw_label, pw_hint):
+            w.bind("<Button-1>", self.toggle_pw_visible)
+            w.bind("<Button-3>", self.copy_pass)
+
         btns = ttk.Frame(self.status_card.body, style="Surface.TFrame")
-        btns.grid(row=0, column=1, rowspan=2, sticky="e")
+        btns.grid(row=0, column=1, rowspan=3, sticky="e")
         self.btn_toggle = ttk.Button(btns, text="开启热点", style="Primary.TButton",
                                      command=self.toggle_hotspot)
         self.btn_toggle.pack(side="right", padx=(8, 0))
@@ -137,6 +152,7 @@ class OverviewPage(Page):
         self.spark.set_data([(d, u) for _t, d, u in app.traffic.history()])
         self.rate_note.configure(text=f"统计方式：{app.traffic.status_text}")
 
+        self._refresh_pw()
         self._render_caps()
 
     def on_caps(self, caps) -> None:
@@ -184,7 +200,7 @@ class OverviewPage(Page):
         threading.Thread(target=work, daemon=True).start()
         self.after_safe(1200, lambda: self.btn_toggle.configure(state="normal"))
 
-    def copy_pass(self) -> None:
+    def copy_pass(self, _e=None) -> None:
         pwd = self.app.status.passphrase or self.app.cfg.hotspot.passphrase
         try:
             self.root.clipboard_clear()
@@ -192,6 +208,23 @@ class OverviewPage(Page):
             self.app.notify("密码已复制到剪贴板", "success")
         except Exception as exc:
             self.app.notify(f"复制失败：{exc}", "error")
+
+    def _current_pw(self) -> str:
+        return self.app.status.passphrase or self.app.cfg.hotspot.passphrase or ""
+
+    def _refresh_pw(self) -> None:
+        pwd = self._current_pw()
+        if not pwd:
+            text = "(未读取)"
+        elif self._pw_visible:
+            text = pwd
+        else:
+            text = "●" * len(pwd)
+        self.pw_label.configure(text=text)
+
+    def toggle_pw_visible(self, _e=None) -> None:
+        self._pw_visible = not self._pw_visible
+        self._refresh_pw()
 
     @property
     def root(self):
