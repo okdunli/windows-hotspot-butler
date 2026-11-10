@@ -1,0 +1,344 @@
+{
+  "source": "/Users/mac/github/windows-hotspot-butler/hotspot",
+  "port": "/Users/mac/work/windows-hotspot-butler-rosezm",
+  "summary": {
+    "compared": 48,
+    "IDENTICAL": 48,
+    "extra_in_port": [],
+    "relocated_assets": {
+      "compared": 6,
+      "IDENTICAL": 6
+    }
+  },
+  "files": [
+    {
+      "file": "__init__.py",
+      "status": "IDENTICAL",
+      "sha256": "5c4aac59b2ca285cd5413b2cef7b105607ebd11e33cf165f3b599737bfb74685",
+      "bytes": 146
+    },
+    {
+      "file": "assets/icon.ico",
+      "status": "IDENTICAL",
+      "sha256": "f2b3cc174861b0e8c40118b6938854e022fa702daeb976066fdcd98d7d671c7b",
+      "bytes": 20847
+    },
+    {
+      "file": "assets/icon.png",
+      "status": "IDENTICAL",
+      "sha256": "eaebc850d8d6e1ec21e3b6d2456514e31860f54b40edd031ea633397212de485",
+      "bytes": 171695
+    },
+    {
+      "file": "core/__init__.py",
+      "status": "IDENTICAL",
+      "sha256": "235dd076b3009f35e51d7db8249606cae6741556ecf4d13f5280666497326035",
+      "bytes": 59
+    },
+    {
+      "file": "core/captive.py",
+      "status": "IDENTICAL",
+      "sha256": "9dfc7812ce9a364c4ac55acba806394644b5cd51888bd7491d63e88dbe5d7105",
+      "bytes": 28516
+    },
+    {
+      "file": "core/config.py",
+      "status": "IDENTICAL",
+      "sha256": "49af9023caa283bea207cb7d550c9687308641d2ff596cf197d43aef2e8ae04f",
+      "bytes": 7428
+    },
+    {
+      "file": "core/deviceman.py",
+      "status": "IDENTICAL",
+      "sha256": "dbcbe0ef697de754373a06076f9cc8051bc6230d4ba1aa7c3c7e7fd1cbd54a9c",
+      "bytes": 8566
+    },
+    {
+      "file": "core/hotspot.py",
+      "status": "IDENTICAL",
+      "sha256": "0b30a9484c85676ddbdac36d239dbea6d7a2ae3186f071c3cf9ab92de442e62d",
+      "bytes": 25803
+    },
+    {
+      "file": "core/ics.py",
+      "status": "IDENTICAL",
+      "sha256": "2dd66cb99647c3261af2be2ac17af925c70eb4b76d5d353299355c3f9b1c63b6",
+      "bytes": 3182
+    },
+    {
+      "file": "core/netinfo.py",
+      "status": "IDENTICAL",
+      "sha256": "e823d09e457a7571c69e2967d3cc8ab7e46bba96616236aaa834d71ad31aceff",
+      "bytes": 6855
+    },
+    {
+      "file": "core/oui.py",
+      "status": "IDENTICAL",
+      "sha256": "726cc014f035c97a8be6d7ce8245641ee2f32fda9c3952dc6784e4ac1a6670db",
+      "bytes": 16317
+    },
+    {
+      "file": "core/paths.py",
+      "status": "IDENTICAL",
+      "sha256": "ab5164dab65fddbe673a49d5bd2d602cba0acf5ada207e94dac2ec7e2a1fc525",
+      "bytes": 2210
+    },
+    {
+      "file": "core/portal.py",
+      "status": "IDENTICAL",
+      "sha256": "7df579aef8e2502927e2c320564b8e8436c6e314239ffc532dc2b89231e319cd",
+      "bytes": 16795
+    },
+    {
+      "file": "core/portforward.py",
+      "status": "IDENTICAL",
+      "sha256": "e9b4005a596f9ff296556f94708f487445914d110f4bab5492ce84fc1eb8f451",
+      "bytes": 4505
+    },
+    {
+      "file": "core/pshell.py",
+      "status": "IDENTICAL",
+      "sha256": "952d1d362067d428e59eacd8c7697143ab3ee9160fc70ab792bdf4ac95d30d2f",
+      "bytes": 4686
+    },
+    {
+      "file": "core/share.py",
+      "status": "IDENTICAL",
+      "sha256": "2698c9bbe377fe27a2ae38f93b4191f7acc2112955ed7e364f5f38346f2c980b",
+      "bytes": 10957
+    },
+    {
+      "file": "core/speedtest.py",
+      "status": "IDENTICAL",
+      "sha256": "34d2385b48454b4399e6c3437700e8468b33dec9c751cb3864f0dbba34acf8b0",
+      "bytes": 1868
+    },
+    {
+      "file": "core/storage.py",
+      "status": "IDENTICAL",
+      "sha256": "6571373f802b861a7397322a2d973a43543b9ec1b91fe1aa66dcc09995494fa1",
+      "bytes": 17187
+    },
+    {
+      "file": "core/traffic.py",
+      "status": "IDENTICAL",
+      "sha256": "eb8c6306c5f32db40d6a409b3dd99f7526d6cef7075907a7132b12108b14d2f7",
+      "bytes": 14813
+    },
+    {
+      "file": "core/wificaps.py",
+      "status": "IDENTICAL",
+      "sha256": "a2f7543b77137f1cdb79de3b180fa64204850396673aa530c5fa277b835441bb",
+      "bytes": 18326
+    },
+    {
+      "file": "scripts/ics.ps1",
+      "status": "IDENTICAL",
+      "sha256": "9f778154095a7713b66aa7b25e7693f944e1f2b9ba4bf0218dfd03d6f4ba38bb",
+      "bytes": 1423
+    },
+    {
+      "file": "scripts/tethering.ps1",
+      "status": "IDENTICAL",
+      "sha256": "0b1612cee273c93b0de092da44138e9da92abf3f7d5ab9c53f2f44e0bec76c16",
+      "bytes": 7502
+    },
+    {
+      "file": "templates/aurora.html",
+      "status": "IDENTICAL",
+      "sha256": "ebb028c9b05ddac4f391f86657c653e6847dc6124698244023abd1431b89c2a0",
+      "bytes": 3726
+    },
+    {
+      "file": "templates/corporate.html",
+      "status": "IDENTICAL",
+      "sha256": "90983387214274316b767dc62a9949ab5e0606520f22aba23664703fd2ad933f",
+      "bytes": 2699
+    },
+    {
+      "file": "templates/minimal.html",
+      "status": "IDENTICAL",
+      "sha256": "ca1a02ab45c54a2594e5458fdbc418534ee09606d9559bf777195b50d5153b41",
+      "bytes": 2005
+    },
+    {
+      "file": "templates/ocean.html",
+      "status": "IDENTICAL",
+      "sha256": "1a4b63ccd6d0e1c0fed7785ddc14ec5f2601c899548f6f2758494310c34c4f51",
+      "bytes": 2328
+    },
+    {
+      "file": "ui/__init__.py",
+      "status": "IDENTICAL",
+      "sha256": "67673f0695d66be858cb5c2540f5faa9ca53aa05e77cb997bf0bb036f1d63723",
+      "bytes": 27
+    },
+    {
+      "file": "ui/app.py",
+      "status": "IDENTICAL",
+      "sha256": "cdf664a6d587e330de641be83b08299016c8e919de6a17fac24069d02e32771b",
+      "bytes": 17084
+    },
+    {
+      "file": "ui/icons.py",
+      "status": "IDENTICAL",
+      "sha256": "552bda47e52d138cbdeaee46cc5ed6745904b3dcfe65fc58369ca0e86af1cb0c",
+      "bytes": 9697
+    },
+    {
+      "file": "ui/pages/__init__.py",
+      "status": "IDENTICAL",
+      "sha256": "bf8f41251032f271303cc27967602a638efdf9d419a31c0fce462986b69a6200",
+      "bytes": 22
+    },
+    {
+      "file": "ui/pages/base.py",
+      "status": "IDENTICAL",
+      "sha256": "5a8171c4e1a23f514d36920f362982b028f1095cfc2975c0fc9ce8e450f3b551",
+      "bytes": 2809
+    },
+    {
+      "file": "ui/pages/devices_page.py",
+      "status": "IDENTICAL",
+      "sha256": "99b39b6373c08d821bdb869be2bb78e5733216447e6ceed503287d7f2d112954",
+      "bytes": 26004
+    },
+    {
+      "file": "ui/pages/hotspot_page.py",
+      "status": "IDENTICAL",
+      "sha256": "af2c0e8c5ec188fac35e99c5657d0396fb3fcc59dac0b72065826fddf665868a",
+      "bytes": 23145
+    },
+    {
+      "file": "ui/pages/overview.py",
+      "status": "IDENTICAL",
+      "sha256": "8d1c34b3b079a92fc16c327fdae033b69f447001a471ea9d1ee122b1ef8b91e6",
+      "bytes": 12494
+    },
+    {
+      "file": "ui/pages/portal_page.py",
+      "status": "IDENTICAL",
+      "sha256": "621f783b4225d82d92ed59567fbf0f30e32bd42cc9365957e16a3ea1aebac732",
+      "bytes": 15811
+    },
+    {
+      "file": "ui/pages/settings_page.py",
+      "status": "IDENTICAL",
+      "sha256": "2c4aa3c6cf7fd8a1ce80c2ed16298875e2d5b023dfb4fa941148996fc4792a6c",
+      "bytes": 15088
+    },
+    {
+      "file": "ui/theme.py",
+      "status": "IDENTICAL",
+      "sha256": "eaa942d4a1613489844a8d2e0f31d421ce4bceb5760d0eb73807ce7e35cba9d9",
+      "bytes": 9217
+    },
+    {
+      "file": "ui/widgets.py",
+      "status": "IDENTICAL",
+      "sha256": "ea2d04e8a5178cac140336eb9934e3152a7cf449d152f6e71f79ae6a803640c4",
+      "bytes": 21177
+    },
+    {
+      "file": "webui/__init__.py",
+      "status": "IDENTICAL",
+      "sha256": "f2d7370d56d2a5d662f772e3c998d6dcf7ecc199c903b9da4a4528496646eaf6",
+      "bytes": 57
+    },
+    {
+      "file": "webui/app.py",
+      "status": "IDENTICAL",
+      "sha256": "827d49045638538bd9d2d67b099ff95b189ebd3e3dd18aa6af6263eaeae80bfa",
+      "bytes": 19536
+    },
+    {
+      "file": "webui/backend.py",
+      "status": "IDENTICAL",
+      "sha256": "610522589f7428d3a98ecd3e5dc1fa5a821e914ba50be8172f4c3a4311938ca9",
+      "bytes": 50275
+    },
+    {
+      "file": "webui/hotkey.py",
+      "status": "IDENTICAL",
+      "sha256": "4cccca7e48813be39167f24e148fe4e696e44c18e93fb3e17dfa36b41ff40804",
+      "bytes": 1614
+    },
+    {
+      "file": "webui/i18n.py",
+      "status": "IDENTICAL",
+      "sha256": "c1165b05628facab429e5a201f509f63bb0fb4e8c0d6c60fa2fd74c9935f291d",
+      "bytes": 14175
+    },
+    {
+      "file": "webui/tray.py",
+      "status": "IDENTICAL",
+      "sha256": "9a251b08e9bb870d2b3db76e9eee781e466b363a3a9039515ab0848c32644d77",
+      "bytes": 4731
+    },
+    {
+      "file": "webui/ui/app.js",
+      "status": "IDENTICAL",
+      "sha256": "75c12d39b12686f6865e5b1a30027b8c5fa8422fdcfc88c6b6e05211dadc3b1c",
+      "bytes": 31364
+    },
+    {
+      "file": "webui/ui/index.html",
+      "status": "IDENTICAL",
+      "sha256": "720782c6563661031d18f41783eac571cc322fe52148b2a803ed8c71df944589",
+      "bytes": 16968
+    },
+    {
+      "file": "webui/ui/mini.html",
+      "status": "IDENTICAL",
+      "sha256": "59ced8a44a839a31beab57137ac8f4984f5b120f61225256172a37e0359e5709",
+      "bytes": 8311
+    },
+    {
+      "file": "webui/ui/style.css",
+      "status": "IDENTICAL",
+      "sha256": "aa919043858c7e0dc85b2ea0527f8f235d55b9db27266c27e4daecb6ed7e153e",
+      "bytes": 27232
+    }
+  ],
+  "relocated_assets": [
+    {
+      "file": "hotspot/templates/aurora.html",
+      "port": "portal-templates/aurora.html",
+      "status": "IDENTICAL",
+      "sha256": "ebb028c9b05ddac4f391f86657c653e6847dc6124698244023abd1431b89c2a0"
+    },
+    {
+      "file": "hotspot/templates/corporate.html",
+      "port": "portal-templates/corporate.html",
+      "status": "IDENTICAL",
+      "sha256": "90983387214274316b767dc62a9949ab5e0606520f22aba23664703fd2ad933f"
+    },
+    {
+      "file": "hotspot/templates/minimal.html",
+      "port": "portal-templates/minimal.html",
+      "status": "IDENTICAL",
+      "sha256": "ca1a02ab45c54a2594e5458fdbc418534ee09606d9559bf777195b50d5153b41"
+    },
+    {
+      "file": "hotspot/templates/ocean.html",
+      "port": "portal-templates/ocean.html",
+      "status": "IDENTICAL",
+      "sha256": "1a4b63ccd6d0e1c0fed7785ddc14ec5f2601c899548f6f2758494310c34c4f51"
+    },
+    {
+      "file": "hotspot/scripts/ics.ps1",
+      "port": "scripts/ps1/ics.ps1",
+      "status": "IDENTICAL",
+      "sha256": "9f778154095a7713b66aa7b25e7693f944e1f2b9ba4bf0218dfd03d6f4ba38bb"
+    },
+    {
+      "file": "hotspot/scripts/tethering.ps1",
+      "port": "scripts/ps1/tethering.ps1",
+      "status": "IDENTICAL",
+      "sha256": "0b1612cee273c93b0de092da44138e9da92abf3f7d5ab9c53f2f44e0bec76c16"
+    }
+  ],
+  "source_ref": "bc866dae3f5ae47e8bbea74100b036836e53e818",
+  "source_note": "原版业务包从 git 对象读取（git show <source_ref>:hotspot/...）；该 ref 是纯 Python 应用被移除前的最后一次提交。",
+  "source_prefix": "hotspot/"
+}
