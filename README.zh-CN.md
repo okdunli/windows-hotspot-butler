@@ -52,11 +52,11 @@ Windows热点管理器在系统能力之上补齐了这些部分：
 
 ```bash
 cd windows-hotspot-butler
-pip install -r requirements.txt
-python main.py
+npm install                      # Rosezm 前端（src/，TypeScript）
+pip install -r requirements.txt   # 桌面壳（pywebview 窗口 + 后端服务）
 ```
 
-也可双击 `Run.bat` 启动，脚本会自动检测 Python 环境并检查 pywebview 是否已安装，缺失时给出提示。若使用免安装版 Python，将其解压至项目根目录下的 `tools\python\`，启动脚本会优先采用该解释器。
+随后双击 `Run.bat` 启动桌面应用（脚本会自动检测 Python 环境并检查 pywebview 是否已安装，缺失时给出提示），或执行 `npm run dev` 启动 Rosezm 网页预览。
 
 首次使用建议按以下顺序操作：
 
@@ -127,7 +127,7 @@ Windows 下发射 WiFi 信号有三条互不相同的路径，不同无线网卡
 
 程序启动时执行 `netsh wlan show drivers` 与 `netsh wlan show wirelesscapabilities`，解析上述三项能力后选择后端：默认优先 WinRT（支持 5 GHz），不可用时回退 netsh。netsh 后端仅负责建立 AP，因此在其启动后会额外启用 Internet 连接共享（ICS），否则设备虽能连上但无法访问外网。
 
-以上判定结果（网卡型号、无线电类型、频段支持、加密能力、当前后端、被共享的上网连接）均可在「诊断」面板中查看，执行 `python main.py --selftest` 也可输出同样内容。
+以上判定结果（网卡型号、无线电类型、频段支持、加密能力、当前后端、被共享的上网连接）均可在「诊断」面板中查看，执行 `python python-app/run.py --selftest` 也可输出同样内容。
 
 ### 强制门户
 
@@ -186,45 +186,59 @@ Windows 下发射 WiFi 信号有三条互不相同的路径，不同无线网卡
 
 ```
 windows-hotspot-butler/
-├── main.py                  入口：参数解析 / 自检 / 界面分发
+├── src/                     Rosezm 前端（TypeScript）
+│   ├── pages/               index.rose / mini.rose / api 路由 / 404 / 500
+│   └── server/              服务端 Windows 核心（hotspot、captive、ics 等）
+├── public/                  1:1 原版界面（index/mini/style/app.js）+ 增强层
+├── portal-templates/         强制门户欢迎页模板（4 个）
+├── python-app/              桌面壳（单进程）
+│   ├── run.py               入口：参数解析 / 自检 / 界面分发
+│   ├── server.py            HTTP 服务：/api/state、/api/op/<name>、静态资源
+│   ├── desktop_webview.py   pywebview 窗口、托盘、热键、边缘缩放
+│   ├── windows_selftest.py  只读 Windows 环境自检
+│   ├── build_exe.py         PyInstaller 打包（--windowed / --onefile）
+│   ├── health_check.py      一条命令跑完所有自动闸门
+│   ├── test_*.py mock_*.py  回归测试套件
+│   └── hotspot/             上游业务包（逐字节一致，1:1）
+│       ├── core/            核心逻辑，与界面无关
+│       │   ├── hotspot.py   热点控制：WinRT 与 netsh 双后端
+│       │   ├── wificaps.py  网卡能力探测与后端推荐
+│       │   ├── captive.py   强制门户：DNS 劫持 + HTTP 门户 + 放行名单
+│       │   ├── portal.py    欢迎页模板渲染
+│       │   ├── traffic.py   流量统计引擎（scapy / adapter / demo）
+│       │   ├── deviceman.py 设备台账：识别、改名、类型管理
+│       │   ├── storage.py   SQLite 流量库与设备档案读写
+│       │   ├── netinfo.py   网卡、ARP 与 ICS 采集
+│       │   ├── ics.py       Internet 连接共享开关
+│       │   ├── share.py     局域网文件共享服务
+│       │   ├── portforward.py 端口转发（netsh portproxy）
+│       │   ├── speedtest.py Cloudflare 下载测速
+│       │   ├── oui.py       MAC 厂商库与类型推断
+│       │   ├── config.py    配置结构与持久化
+│       │   └── paths.py     路径常量与日志初始化
+│       ├── webui/           Web 界面后端（默认）
+│       │   ├── app.py       窗口、悬浮浮窗、托盘、热键
+│       │   ├── backend.py   JS↔Python 桥；耗时操作走线程池
+│       │   ├── tray.py      托盘图标
+│       │   ├── hotkey.py    全局热键注册与消息循环
+│       │   ├── i18n.py      中英文翻译表
+│       │   └── ui/          前端 HTML / CSS / JS 与 mini.html
+│       ├── templates/       门户欢迎页模板（4 个）
+│       └── scripts/         PowerShell 脚本（tethering.ps1 / ics.ps1）
+├── package.json             Rosezm 前端脚本（build / dev / check）
 ├── Run.bat                  一键启动脚本，自动检测运行环境
-├── requirements.txt
-├── hotspot/
-│   ├── core/                核心逻辑，与界面无关
-│   │   ├── hotspot.py       热点控制：WinRT 与 netsh 双后端
-│   │   ├── wificaps.py      网卡能力探测与后端推荐
-│   │   ├── captive.py       强制门户：DNS 劫持 + HTTP 门户 + 放行名单
-│   │   ├── portal.py        欢迎页模板渲染
-│   │   ├── traffic.py       流量统计引擎（scapy / adapter / demo）
-│   │   ├── deviceman.py     设备台账：识别、改名、类型管理
-│   │   ├── storage.py       SQLite 流量库与设备档案读写
-│   │   ├── netinfo.py       网卡、ARP、ICS 信息采集
-│   │   ├── ics.py           Internet 连接共享启停
-│   │   ├── share.py         局域网文件共享服务
-│   │   ├── portforward.py   端口转发（netsh portproxy）
-│   │   ├── speedtest.py     Cloudflare 下行测速
-│   │   ├── oui.py           MAC 厂商库与设备类型推断
-│   │   ├── config.py        配置定义与持久化
-│   │   └── paths.py         路径常量与日志初始化
-│   ├── webui/               网页界面（默认）
-│   │   ├── app.py           窗口、悬浮窗、托盘、热键
-│   │   ├── backend.py       JS↔Python 桥接层，耗时操作走线程池
-│   │   ├── tray.py          托盘图标
-│   │   ├── hotkey.py        全局热键注册与消息循环
-│   │   ├── i18n.py          中英文翻译表
-│   │   └── ui/              前端 HTML / CSS / JS 与 mini.html
-│   ├── ui/                  Tkinter 传统界面（--tk 回退）
-│   ├── templates/           门户欢迎页模板（4 套）
-│   └── scripts/             PowerShell 脚本（tethering.ps1 / ics.ps1）
+├── BuildExe.bat             打包桌面应用 exe
+├── requirements.txt         桌面壳的 Python 依赖
+├── .github/workflows/       CI（每次 push）与 tag 触发的预发布
 └── LICENSE                  Apache 2.0
 ```
 
 常见定制方式：
 
 - **新增门户模板**：将 HTML 文件放入 `hotspot/templates/`，并在 `config.json` 中将 `portal.template` 设置为文件名（不含 `.html`）。模板支持 `{{ssid}}`、`{{title}}`、`{{notice_li}}`、`{{button}}`、`{{gateway}}` 等占位符，渲染采用字符串替换方式，与模板内的 CSS 花括号不冲突。
-- **扩展厂商库**：在 `%APPDATA%\WifiHotspotManager\oui_extra.csv` 中按 `MAC前缀,厂商名,设备类型` 逐行写入，例如 `A4C138,Telink,iot`。设备类型取值参见 `hotspot/core/oui.py` 中的 `DEVICE_TYPES`。
-- **修改界面**：前端文件位于 `webui/ui/`，修改后刷新即可生效，配合 `--debug` 可打开 WebView 开发者工具。需要向前端暴露新接口时，在 `webui/backend.py` 中新增公共方法即可自动挂载到 `window.pywebview.api`。
-- **环境自检**：执行 `python main.py --selftest`，可在不打开界面的情况下验证各核心模块与网卡能力。
+- **扩展厂商库**：在 `%APPDATA%\WifiHotspotManager\oui_extra.csv` 中按 `MAC前缀,厂商名,设备类型` 逐行写入，例如 `A4C138,Telink,iot`。设备类型取值参见 `python-app/hotspot/core/oui.py` 中的 `DEVICE_TYPES`。
+- **修改界面**：前端文件位于 `public/`（Rosezm 源码在 `src/`），修改后刷新即可生效，配合 `--debug` 可打开 WebView 开发者工具。需要向前端暴露新接口时，在 `python-app/hotspot/webui/backend.py` 中新增公共方法即可自动挂载到 `window.pywebview.api`。
+- **环境自检**：执行 `python python-app/run.py --selftest`，可在不打开界面的情况下验证各核心模块与网卡能力。
 
 ---
 

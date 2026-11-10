@@ -52,11 +52,11 @@ Intended for machines that serve as a hotspot regularly and where some control o
 
 ```bash
 cd windows-hotspot-butler
-pip install -r requirements.txt
-python main.py
+npm install                 # Rosezm frontend (src/, TypeScript)
+pip install -r requirements.txt   # desktop shell (pywebview window + service)
 ```
 
-Alternatively, double-click `Run.bat`; the script detects the Python environment, checks that pywebview is installed and reports anything missing. When a portable Python is used, unpack it into `tools\python\` under the project root and the launcher will prefer that interpreter.
+Then double-click `Run.bat` to start the desktop app (it detects the Python environment, checks that pywebview is installed and reports anything missing), or run `npm run dev` for the Rosezm web preview.
 
 Recommended first-run sequence:
 
@@ -127,7 +127,7 @@ Windows offers three unrelated ways to make a wireless adapter broadcast an SSID
 
 At startup the application runs `netsh wlan show drivers` and `netsh wlan show wirelesscapabilities`, resolves those three capabilities, and picks a backend: WinRT first (5 GHz capable), falling back to netsh when unavailable. The netsh backend only creates the access point, so starting it also enables Internet Connection Sharing — without ICS, clients associate but have no route out.
 
-Every one of those findings (adapter model, radio types, band support, encryption support, active backend, the upstream connection being shared) is listed in the diagnostics panel and also printed by `python main.py --selftest`.
+Every one of those findings (adapter model, radio types, band support, encryption support, active backend, the upstream connection being shared) is listed in the diagnostics panel and also printed by `python python-app/run.py --selftest`.
 
 ### Captive portal
 
@@ -186,45 +186,59 @@ They need pystray + Pillow and qrcode respectively. Run `pip install pystray pil
 
 ```
 windows-hotspot-butler/
-├── main.py                  Entry point: args / selftest / UI dispatch
+├── src/                     Rosezm frontend (TypeScript)
+│   ├── pages/               index.rose / mini.rose / api routes / 404 / 500
+│   └── server/              Server-side Windows core (hotspot, captive, ics, ...)
+├── public/                  1:1 original UI (index/mini/style/app.js) + enhance layer
+├── portal-templates/         Portal welcome page templates (4)
+├── python-app/              Desktop shell (single process)
+│   ├── run.py               Entry point: args / selftest / UI dispatch
+│   ├── server.py            HTTP service: /api/state, /api/op/<name>, static UI
+│   ├── desktop_webview.py   pywebview window, tray, hotkey, edge resize
+│   ├── windows_selftest.py  Read-only Windows self-test
+│   ├── build_exe.py         PyInstaller packaging (--windowed / --onefile)
+│   ├── health_check.py      One command, all automated gates
+│   ├── test_*.py mock_*.py  Regression suite
+│   └── hotspot/             Upstream business package (byte-identical, 1:1)
+│       ├── core/            Core logic, UI-independent
+│       │   ├── hotspot.py   Hotspot control: WinRT and netsh backends
+│       │   ├── wificaps.py  Adapter capability probing and backend recommendation
+│       │   ├── captive.py   Portal: DNS hijack + HTTP portal + allow-list
+│       │   ├── portal.py    Welcome page template rendering
+│       │   ├── traffic.py   Traffic engine (scapy / adapter / demo)
+│       │   ├── deviceman.py Device roster: identify, rename, type
+│       │   ├── storage.py   SQLite traffic DB and device profile I/O
+│       │   ├── netinfo.py   Adapter, ARP and ICS collection
+│       │   ├── ics.py       Internet Connection Sharing toggle
+│       │   ├── share.py     LAN file sharing service
+│       │   ├── portforward.py Port forwarding (netsh portproxy)
+│       │   ├── speedtest.py Cloudflare download speed test
+│       │   ├── oui.py       MAC vendor database and type inference
+│       │   ├── config.py    Config schema and persistence
+│       │   └── paths.py     Path constants and logging setup
+│       ├── webui/           Web UI backend (default)
+│       │   ├── app.py       Window, floating widget, tray, hotkey
+│       │   ├── backend.py   JS↔Python bridge; heavy work on a thread pool
+│       │   ├── tray.py      Tray icon
+│       │   ├── hotkey.py    Global hotkey registration and message loop
+│       │   ├── i18n.py      Chinese/English translation table
+│       │   └── ui/          Front-end HTML / CSS / JS and mini.html
+│       ├── templates/       Portal welcome page templates (4)
+│       └── scripts/         PowerShell scripts (tethering.ps1 / ics.ps1)
+├── package.json             Rosezm frontend scripts (build / dev / check)
 ├── Run.bat                  One-click launcher with environment detection
-├── requirements.txt
-├── hotspot/
-│   ├── core/                Core logic, UI-independent
-│   │   ├── hotspot.py       Hotspot control: WinRT and netsh backends
-│   │   ├── wificaps.py      Adapter capability probing and backend recommendation
-│   │   ├── captive.py       Portal: DNS hijack + HTTP portal + allow-list
-│   │   ├── portal.py        Welcome page template rendering
-│   │   ├── traffic.py       Traffic engine (scapy / adapter / demo)
-│   │   ├── deviceman.py     Device roster: identify, rename, type
-│   │   ├── storage.py       SQLite traffic DB and device profile I/O
-│   │   ├── netinfo.py       Adapter, ARP and ICS collection
-│   │   ├── ics.py           Internet Connection Sharing toggle
-│   │   ├── share.py         LAN file sharing service
-│   │   ├── portforward.py   Port forwarding (netsh portproxy)
-│   │   ├── speedtest.py     Cloudflare download speed test
-│   │   ├── oui.py           MAC vendor database and type inference
-│   │   ├── config.py        Config schema and persistence
-│   │   └── paths.py         Path constants and logging setup
-│   ├── webui/               Web UI (default)
-│   │   ├── app.py           Window, floating widget, tray, hotkey
-│   │   ├── backend.py       JS↔Python bridge; heavy work on a thread pool
-│   │   ├── tray.py          Tray icon
-│   │   ├── hotkey.py        Global hotkey registration and message loop
-│   │   ├── i18n.py          Chinese/English translation table
-│   │   └── ui/              Front-end HTML / CSS / JS and mini.html
-│   ├── ui/                  Legacy Tkinter UI (--tk fallback)
-│   ├── templates/           Portal welcome page templates (4)
-│   └── scripts/             PowerShell scripts (tethering.ps1 / ics.ps1)
+├── BuildExe.bat             Package the desktop app into an exe
+├── requirements.txt         Python dependencies of the desktop shell
+├── .github/workflows/       CI (every push) and tag-driven pre-release
 └── LICENSE                  Apache 2.0
 ```
 
 Common customizations:
 
-- **Add a portal template.** Drop an HTML file into `hotspot/templates/` and set `portal.template` in `config.json` to its name without the `.html` extension. The placeholders `{{ssid}}`, `{{title}}`, `{{notice_li}}`, `{{button}}` and `{{gateway}}` are available. Rendering uses plain string substitution, so CSS braces in the template are left untouched.
-- **Extend the vendor database.** Add lines to `%APPDATA%\WifiHotspotManager\oui_extra.csv` in the format `MACprefix,Vendor,devicetype`, for example `A4C138,Telink,iot`. Valid device types are listed in `DEVICE_TYPES` in `hotspot/core/oui.py`.
-- **Modify the interface.** The front end lives in `webui/ui/`; reload after editing, and use `--debug` to open the WebView developer tools. To expose a new call from Python, add a public method to `webui/backend.py` — it is mounted automatically onto `window.pywebview.api`.
-- **Check an environment.** Run `python main.py --selftest` to exercise the core modules and adapter probing without opening a window.
+- **Add a portal template.** Drop an HTML file into `python-app/hotspot/templates/` and set `portal.template` in `config.json` to its name without the `.html` extension. The placeholders `{{ssid}}`, `{{title}}`, `{{notice_li}}`, `{{button}}` and `{{gateway}}` are available. Rendering uses plain string substitution, so CSS braces in the template are left untouched.
+- **Extend the vendor database.** Add lines to `%APPDATA%\WifiHotspotManager\oui_extra.csv` in the format `MACprefix,Vendor,devicetype`, for example `A4C138,Telink,iot`. Valid device types are listed in `DEVICE_TYPES` in `python-app/hotspot/core/oui.py`.
+- **Modify the interface.** The front end lives in `public/` (the Rosezm sources in `src/`); reload after editing, and use `--debug` to open the WebView developer tools. To expose a new call from Python, add a public method to `python-app/hotspot/webui/backend.py` — it is mounted automatically onto `window.pywebview.api`.
+- **Check an environment.** Run `python python-app/run.py --selftest` to exercise the core modules and adapter probing without opening a window.
 
 ---
 
