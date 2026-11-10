@@ -1,9 +1,10 @@
 name: Release
 
-# A pushed tag is the release trigger:
-#   detect (same gates as CI) -> build the single-file exe on Windows
-#   -> zip it -> generate the notes from the commit subjects -> publish a
-#      pre-release with the archive attached.
+# A pushed tag publishes four artifacts, in the usual vendor layout:
+#   WindowsHotspotButler-<ver>-windows-amd64-setup.exe
+#   WindowsHotspotButler-<ver>-windows-amd64.zip
+#   WindowsHotspotButler-<ver>-windows-arm64-setup.exe
+#   WindowsHotspotButler-<ver>-windows-arm64.zip
 on:
   push:
     tags: ['v*']
@@ -12,17 +13,25 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     env:
-      # Windows runner 默认 stdout 编码是 GBK；测试大量打印中文，统一 UTF-8
+      # Windows runners default to GBK for stdout; the suite prints Chinese
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
-          # the notes need every tag and the commits between them
+          # the 1:1 parity gate reads the original package from git objects
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -49,21 +58,68 @@ jobs:
       - name: Detect (same gates as CI)
         run: python python-app/health_check.py
 
-      - name: Build single-file exe
+      - name: Build the single-file exe
         run: python python-app/build_exe.py --onefile
 
-      - name: Pack the exe into a zip
+      - name: Stage the portable zip
         shell: pwsh
         run: |
           $exe = "python-app/dist/WiFiHotspotManager.exe"
           if (-not (Test-Path $exe)) { throw "exe not found: $exe" }
-          $stage = "whm-package"
-          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          $ver = $env:GITHUB_REF_NAME -replace '^v', ''
+          $stage = "portable"
           New-Item -ItemType Directory -Force $stage | Out-Null
           Copy-Item $exe "$stage/WiFiHotspotManager.exe"
-          Copy-Item README.md "$stage/README.md"
-          Compress-Archive -Path "$stage/*" -DestinationPath "WindowsHotspotButler-$env:GITHUB_REF_NAME.zip"
-          Get-ChildItem *.zip | Select-Object Name, Length
+          Compress-Archive -Path "$stage/*" `
+            -DestinationPath "WindowsHotspotButler-$ver-windows-${{ matrix.arch }}.zip"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $ver = $env:GITHUB_REF_NAME -replace '^v', ''
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC not found: $iscc" }
+          # Inno 的架构标识符是 x64/arm64（文件名用行业惯例 amd64/arm64）
+          $innoArch = if ("${{ matrix.arch }}" -eq "amd64") { "x64" } else { "${{ matrix.arch }}" }
+          & $iscc "/DMyAppVersion=$ver" "/DMyAppArch=${{ matrix.arch }}" "/DMyInnoArch=$innoArch" `
+            "/DMyAppSource=..\python-app\dist\WiFiHotspotManager.exe" installer\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed: $LASTEXITCODE" }
+          Get-ChildItem dist-installer
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: |
+            WindowsHotspotButler-*-windows-${{ matrix.arch }}.zip
+            dist-installer/WindowsHotspotButler-*-windows-${{ matrix.arch }}-setup.exe
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the notes need every tag and the commits between them
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect the four artifacts
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name '*.zip' -o -name '*-setup.exe' \) -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Generate release notes
         run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > notes.md
@@ -72,7 +128,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: notes.md
-          files: |
-            *.zip
+          files: dist/*
           # every release so far ships as a pre-release
           prerelease: true
