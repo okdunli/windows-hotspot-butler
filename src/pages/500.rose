@@ -1,0 +1,27 @@
+<script>
+  let errMsg = $state('');
+</script>
+
+<head>
+  <title>出错了 · Windows热点管理器</title>
+</head>
+
+<div class="nf">
+  <div class="nf-emoji">⚠️</div>
+  <h1>500 · 渲染出错</h1>
+  <p>页面渲染时发生错误，请查看服务端日志（%APPDATA%\WifiHotspotManager\logs\app.log）。</p>
+  {#if errMsg}
+  <code>{errMsg}</code>
+  {/if}
+  <a href="/">返回主界面</a>
+</div>
+
+<style>
+  .nf { min-height: 100vh; display: grid; place-items: center; align-content: center; gap: 10px;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: #e6edf3; }
+  .nf-emoji { font-size: 44px; }
+  h1 { font-size: 20px; }
+  p { color: #8b949e; font-size: 13px; }
+  code { color: #f85149; font-size: 12px; max-width: 80vw; overflow-wrap: anywhere; }
+  a { color: #58A6FF; text-decoration: none; font-size: 13px; }
+</style>

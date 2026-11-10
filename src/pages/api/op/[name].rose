@@ -1,0 +1,19 @@
+<script>
+  // 通用操作端点：POST /api/op/<name>，body = { args: [...] }。
+  // name 与原版 pywebview js_api 方法一一对应（camelCase）。本地内核直接 import（BN-6）。
+  import { ensureBackend, apiCall } from '../../../server/index.ts';
+
+  export async function POST(req: Request) {
+    await ensureBackend();
+    const { pathname } = new URL(req.url);
+    const name = pathname.split('/').pop() ?? '';
+    let args: unknown[] = [];
+    try {
+      const body = (await req.json()) as { args?: unknown[] };
+      if (body && Array.isArray(body.args)) args = body.args;
+    } catch {
+      /* 无 body / 非法 JSON：按无参数处理 */
+    }
+    return apiCall(name, args);
+  }
+</script>

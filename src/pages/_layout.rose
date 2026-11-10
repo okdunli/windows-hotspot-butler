@@ -1,0 +1,9 @@
+<script>
+  // 外链 bundle 模式（innovation #33）：默认 inline 模式的 CSP 只给内联
+  // bundle 做 hash，不含 'self'，会拦掉本应用 1:1 移植所需的 /public/app.js
+  // 与 /public/style.css。split 模式让框架给 script-src 自动加 'self'，
+  // 外部脚本/样式表与内联 bootstrap 同页共存。
+  export const bundle = 'split';
+</script>
+
+<slot />

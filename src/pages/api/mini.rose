@@ -1,0 +1,9 @@
+<script>
+  // 迷你浮窗轻量状态（等价原版 mini_state()）。本地 TS 模块直接 import（BN-6）。
+  import { ensureBackend, apiCall } from '../../server/index.ts';
+
+  export async function GET() {
+    await ensureBackend();
+    return apiCall('miniState');
+  }
+</script>

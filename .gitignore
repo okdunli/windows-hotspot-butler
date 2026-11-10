@@ -1,19 +1,28 @@
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-build/
+# Web build output
 dist/
-.venv/
-venv/
-env/
-.vscode/
-.idea/
-*.swp
-.DS_Store
-Thumbs.db
+.rosezm-build/
 *.log
+
+# Node deps (run `npm install` after clone)
+node_modules/
+
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# PyInstaller work dir (output dir is already covered by dist/ above)
+python-app/build/
+# PyInstaller-generated spec (rewritten each build; embeds absolute paths)
 *.spec
-config.json
-devices.db
-custom_portal/
+
+# Runtime persisted state + generated reports / evidence (Windows run artefacts)
+python-app/desktop/.rosezm-state.json
+python-app/windows_selftest_report.json
+python-app/tk_probe_report.json
+evidence/
+whm-evidence-*.zip
+
+# OS
+.DS_Store

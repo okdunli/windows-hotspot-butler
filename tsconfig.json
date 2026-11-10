@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true
+  },
+  // Node 类型来自 @types/node（devDependency）；vendor/types-node 保留为
+  // 离线环境的后备副本，不参与本配置的类型解析。
+  "include": ["rosezm-env.d.ts", "src/**/*.ts"]
+}

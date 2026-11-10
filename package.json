@@ -1,0 +1,31 @@
+{
+  "name": "windows-hotspot-butler-rosezm",
+  "version": "1.2.0",
+  "description": "Windows Hotspot Butler, 1:1 ported onto the Rosezm framework (Rosezm web app + Node server-side Windows core)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "build": "node rosezm-cli.mjs build .",
+    "predev": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "dev": "node rosezm-cli.mjs dev .",
+    "preserve": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "serve": "node rosezm-cli.mjs serve .",
+    "start": "npm run build && npm run serve",
+    "precheck": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "check": "node rosezm-cli.mjs check .",
+    "preselftest": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "selftest": "node rosezm-cli.mjs build . && node scripts/selftest.mjs",
+    "prepreview": "node scripts/ensure-esbuild.mjs && node scripts/prep.mjs",
+    "preview": "node rosezm-cli.mjs preview .",
+    "parity": "python3 python-app/check_parity.py"
+  },
+  "optionalDependencies": {
+    "qrcode": "^1.5.4",
+    "cap": "^0.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

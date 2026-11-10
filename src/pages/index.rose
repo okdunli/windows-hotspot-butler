@@ -1,0 +1,1082 @@
+<script>
+  // ===== Windows Hotspot Butler =====
+  // 原 hotspot/webui/ui/{index.html,app.js} 的功能 1:1 重写为 Rosezm 响应式形态：
+  //   * 一份 .rose 同时服务 Web（fetch 打 Node 服务）与 Tk（导出器把 fetch(
+  //     翻成 rose_fetch(，自动带 --api 的 Python 服务地址）。
+  //   * handler 只用 $state + fetch，不碰 document/window/localStorage——
+  //     碰了会被 Python 导出器标为 "the DOM" 而 stub（安全降级，不崩）。
+  //   * 主题持久化用 $persist（框架 rune，各目标自有实现）。
+
+  // ---- 状态（形状 = 原版 get_state() 返回值） ----
+  let st = $state<any>(null);
+  let report = $state<any>(null);
+  let diagLines = $state<any[]>([]);
+  let i18nTable = $state<any>({});
+  let toasts = $state<any[]>([]);
+  let modal = $state('');            // 当前打开的弹窗（'' = 无）
+  let menuMac = $state('');          // 设备菜单（'' = 关）
+  let passShown = $state(false);
+  let busy = $state(false);
+  let diagBusy = $state(false);
+  let speedBusy = $state(false);
+  let theme = $persist('dark');
+  let rr = $state<any>({});
+  let promptTitle = $state('');
+  let promptValue = $state('');
+  let promptMac = $state('');
+  let pfName = $state('');
+  let pfLPort = $state('');
+  let pfIp = $state('');
+  let pfCPort = $state('');
+  let tempHours = $state('1');
+  let autoStopMin = $state('0');
+  let cfgLang = $state('auto');
+  let qrData = $state('');
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  // ---- 翻译（原版机制：键 = 中文原文，zh 模式返回原文） ----
+  // 注意：不能叫 t —— 导出产物 rosezm.py 已有同名函数。
+  function fillOne(s: string, k: string, v: unknown): string {
+    return s.split('{' + k + '}').join(String(v));
+  }
+  function tr(key: string, vars?: Record<string, unknown>): string {
+    let s = i18nTable()[key] || key;
+    if (vars) {
+      if (vars['d']) s = fillOne(s, 'd', vars['d']);
+      if (vars['e']) s = fillOne(s, 'e', vars['e']);
+      if (vars['f']) s = fillOne(s, 'f', vars['f']);
+      if (vars['h']) s = fillOne(s, 'h', vars['h']);
+      if (vars['ip']) s = fillOne(s, 'ip', vars['ip']);
+      if (vars['m']) s = fillOne(s, 'm', vars['m']);
+      if (vars['n']) s = fillOne(s, 'n', vars['n']);
+      if (vars['p']) s = fillOne(s, 'p', vars['p']);
+      if (vars['pw']) s = fillOne(s, 'pw', vars['pw']);
+      if (vars['q']) s = fillOne(s, 'q', vars['q']);
+      if (vars['r']) s = fillOne(s, 'r', vars['r']);
+      if (vars['s']) s = fillOne(s, 's', vars['s']);
+      if (vars['t']) s = fillOne(s, 't', vars['t']);
+      if (vars['u']) s = fillOne(s, 'u', vars['u']);
+      if (vars['v']) s = fillOne(s, 'v', vars['v']);
+    }
+    return s;
+  }
+
+  // ---- API（两目标通用：Web = fetch，Tk = rose_fetch） ----
+  async function op(name: string, args: any[] = []): Promise<any> {
+    try {
+      const r = await fetch('/api/op/' + name, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ args: args }),
+      });
+      return await r.json();
+    } catch (e) {
+      return { ok: false, msg: String(e) };
+    }
+  }
+
+  async function pullState(): Promise<void> {
+    try {
+      const resp = await fetch('/api/state');
+      const s = await resp.json();
+      $setState('st', s);
+      busy = !!s.busy;
+      if (s.toasts && s.toasts.length) {
+        for (const x of s.toasts) {
+          pushToast(x['text'], x['kind']);
+        }
+      }
+    } catch {
+      /* 服务未起时静默，下一轮重试 */
+    }
+  }
+
+  let toastSeq = 0;
+  let lastToastId = 0;
+  function dismissToast(): void {
+    let keep: any[] = [];
+    for (const x of toasts()) {
+      if (x['id'] !== lastToastId) keep = [...keep, x];
+    }
+    $setState('toasts', keep);
+  }
+  function pushToast(text: string, kind = 'info'): void {
+    toastSeq = toastSeq + 1;
+    lastToastId = toastSeq;
+    const entry = { id: toastSeq, text: String(text), kind: kind };
+    $setState('toasts', [...toasts(), entry]);
+    setTimeout(dismissToast, 3200);
+  }
+
+  // ---- 轮询（原版 1.2s） ----
+  onMount(() => {
+    boot();
+    applyThemeDom();
+    timer = setInterval(() => pullState(), 1200);
+  });
+  onCleanup(() => {
+    if (timer) clearInterval(timer);
+  });
+
+  async function boot(): Promise<void> {
+    try {
+      const dictResp = await fetch('/api/op/getI18n', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"args":[]}',
+      });
+      const dict = await dictResp.json();
+      $setState('i18nTable', dict || {});
+    } catch {
+      /* zh 模式给空表 */
+    }
+    let s: any = null;
+    try {
+      const stateResp = await fetch('/api/state');
+      s = await stateResp.json();
+    } catch {
+      s = null;
+    }
+    if (s) {
+      $setState('st', s);
+      busy = !!s.busy;
+      $setState('cfgLang', s.lang || 'auto');
+    }
+  }
+
+  // ---- 派生显示 ----
+  function hs(): Record<string, any> {
+    return (st() || {}).hotspot || {};
+  }
+  function cfg(): Record<string, any> {
+    return (st() || {}).config || {};
+  }
+  function stats(): Record<string, any> {
+    return (st() || {}).stats || {};
+  }
+  function caps(): Record<string, any> {
+    return (st() || {}).caps || {};
+  }
+  function admin(): boolean {
+    const raw = st() || {};
+    return Boolean(raw.admin);
+  }
+  function icons(): any[] {
+    const raw = st() || {};
+    const v = raw.icons;
+    return Array.isArray(v) ? v : [];
+  }
+  function shareSt(): Record<string, any> {
+    const raw = st() || {};
+    return raw.share || {};
+  }
+  function portRules(): any[] {
+    const raw = st() || {};
+    const v = raw.port_fwd;
+    return Array.isArray(v) ? v : [];
+  }
+  function shareText(): string {
+    const sh = shareSt();
+    if (sh.running) {
+      const url = sh.url || '';
+      const run = tr('运行中');
+      return run + ' · ' + url;
+    }
+    return tr('未启动');
+  }
+
+  function portalSt(): Record<string, any> {
+    return (st() || {}).portal || {};
+  }
+  function devices(): any[] {
+    const d = (st() || {}).devices;
+    return Array.isArray(d) ? d : [];
+  }
+  function onlineCount(): number {
+    return devices().filter((d) => d.online).length;
+  }
+  function passText(): string {
+    if (passShown()) {
+      return hs().passphrase || '';
+    }
+    return '••••••••';
+  }
+  function dialText(): string {
+    if (busy) return tr('处理中…');
+    return hs().active ? tr('点击关闭') : tr('点击开启');
+  }
+  function dialSub(): string {
+    return hs().active ? hs().ssid || tr('已开启') : tr('未运行');
+  }
+  function pillText(): string {
+    if (!hs().active) return busy ? tr('切换中…') : tr('未开启');
+    return (busy ? tr('切换中…') : tr('运行中')) + (hs().uptime ? ' · ' + hs().uptime : '');
+  }
+  function showWarn(): boolean {
+    return !caps()['can_host'] && !hs().active;
+  }
+  function remainText(): string {
+    const r = (st() || {}).auto_stop || {};
+    const sec = r.remaining || 0;
+    if (sec <= 0) return '';
+    const mm = Math.floor(sec / 60);
+    const ss = sec % 60;
+    return '⏱ ' + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+  }
+  function tempHint(): string {
+    const tp = (st() || {}).temp_password || {};
+    if (!tp.active) return '';
+    const m = Math.floor((tp.remaining || 0) / 60);
+    return tr('生效中：{pw} · 剩余 {m} 分钟', { pw: tp.password, m });
+  }
+  function portalChipText(): string {
+    const p = portalSt();
+    if (!p.running) return tr('门户 未启动');
+    return p.dns ? tr('门户 · 劫持中') : tr('门户 · 仅手动');
+  }
+  function devSub(d: Record<string, any>): string {
+    let out = '';
+    if (d.ip) out = d.ip + ' · ';
+    out = out + d.mac;
+    if (!d.online && d.last_seen_text) out = out + ' · ' + d.last_seen_text;
+    return out;
+  }
+  function devName(d: Record<string, any>): string {
+    return d.name || d.mac;
+  }
+  function menuDev(): Record<string, any> {
+    const mac = menuMac();
+    for (const x of devices()) {
+      if (x['mac'] === mac) return x;
+    }
+    return {};
+  }
+  function menuTitle(): string {
+    const d = menuDev();
+    if (!d.mac) return menuMac();
+    return devName(d) + (d.ip ? ' · ' + d.ip : '');
+  }
+
+  // ---- 弹窗 ----
+  async function openModal(id: string): Promise<void> {
+    $setState('modal', id);
+    if (id === 'portal') fillPortal();
+    if (id === 'stats') await loadReport();
+    if (id === 'diag') await runDiag();
+  }
+  function closeModal(): void {
+    $setState('modal', '');
+  }
+  function portalStatusText(): string {
+    const p = portalSt();
+    let status = p.running ? tr('运行中') : tr('未启动');
+    let line1 = tr('状态：{s}', { s: status });
+    if (p.need_password) line1 = line1 + ' ' + tr('需访问密码');
+    if (p.running) {
+      let dns = tr('生效中');
+      if (!p.dns) {
+        dns = tr('未生效 — {r}', { r: p.dns_error || tr('未知原因') });
+      }
+      line1 = line1 + '\n' + tr('DNS 劫持：{s}', { s: dns });
+      line1 = line1 + '\n' + tr('已放行设备：{n} 台　劫持查询：{q} 次', { n: p.allowed || 0, q: p.hijacked || 0 });
+      if (p.schedule_open === false) {
+        line1 = line1 + '\n' + tr('不在放行时段（{s}），新设备无法通过门户', { s: p.schedule || '' });
+      }
+    }
+    line1 = line1 + '\n' + tr('门户地址：{u}', { u: p.url || '' });
+    return line1;
+  }
+
+  function fillPortal(): void {
+    const c = cfg();
+    $setState('rr', {
+      portal_enabled: !!c.portal_enabled,
+      portal_dns: !!c.portal_dns,
+      portal_template: c.portal_template || 'aurora',
+      portal_title: c.portal_title || '',
+      portal_notice: c.portal_notice || '',
+      portal_button: c.portal_button || '',
+      portal_password: c.portal_password || '',
+      portal_schedule_start: c.portal_schedule_start ?? 0,
+      portal_schedule_end: c.portal_schedule_end ?? 24,
+    });
+  }
+
+  // ---- 设置表单（bind:value；打开时种子化） ----
+  let ssidField = $state('');
+  let passField = $state('');
+  let bandField = $state('auto');
+  let backendField = $state('auto');
+  let autoStartField = $state(false);
+  let startWinField = $state(false);
+  let closeTrayField = $state(false);
+  let confirmExitField = $state(true);
+  let hotkeyField = $state(true);
+
+  function seedSettings(): void {
+    const c = cfg();
+    $setState('ssidField', c.ssid || '');
+    $setState('passField', c.passphrase || '');
+    $setState('bandField', c.band || 'auto');
+    $setState('backendField', c.backend || 'auto');
+    $setState('autoStartField', !!c.auto_start);
+    $setState('startWinField', !!c.start_with_windows);
+    $setState('closeTrayField', !!c.close_to_tray);
+    $setState('confirmExitField', c.confirm_exit_hotspot !== false);
+    $setState('hotkeyField', !!c.hotkey_enabled);
+  }
+
+  async function saveSettings(): Promise<void> {
+    const r = await op('saveConfigPatch', [{
+      ssid: ssidField(),
+      passphrase: passField(),
+      band: bandField(),
+      backend: backendField(),
+      auto_start: autoStartField(),
+      start_with_windows: startWinField(),
+      close_to_tray: closeTrayField(),
+      confirm_exit_hotspot: confirmExitField(),
+      hotkey_enabled: hotkeyField(),
+    }]);
+    if (r && r.ok) {
+      pushToast(tr('设置已保存'), 'success');
+      closeModal();
+      await pullState();
+    } else {
+      pushToast((r && r.msg) || tr('操作失败'), 'error');
+    }
+  }
+
+  async function applyNow(): Promise<void> {
+    pushToast(tr('正在下发配置…'), 'info');
+    const r = await op('applyNow');
+    if (r && r.msg) pushToast(r.msg, r.ok ? 'success' : 'error');
+  }
+
+  // ---- 热点开关 ----
+  async function toggleHotspot(): Promise<void> {
+    if (busy) return;
+    busy = true;
+    const r = await op('toggle');
+    if (r && r.started === false && r.msg) pushToast(r.msg, 'error');
+    await pullState();
+  }
+
+  async function refreshAll(): Promise<void> {
+    await op('refresh');
+    await pullState();
+  }
+
+  // ---- 设备操作 ----
+  function openDevMenu(mac: string): void {
+    $setState('menuMac', mac === menuMac() ? '' : mac);
+  }
+  function closeMenu(): void {
+    $setState('menuMac', '');
+  }
+  async function devAction(act: string): Promise<void> {
+    const mac = menuMac();
+    closeMenu();
+    if (!mac) return;
+    let d: any = null;
+    for (const x of devices()) {
+      if (x['mac'] === mac) {
+        d = x;
+        break;
+      }
+    }
+    if (act === 'rename') {
+      $setState('promptTitle', tr('重命名设备'));
+      $setState('promptValue', (d && d.name) || '');
+      $setState('promptMac', mac);
+      $setState('modal', 'prompt');
+      return;
+    }
+    if (act === 'block') {
+      const r = await op(d && d.blocked ? 'unblockDevice' : 'blockDevice', [mac]);
+      pushToast(r.msg, r.ok ? 'success' : 'error');
+    } else if (act === 'portal') {
+      const r = await op(d && d.allowed ? 'portalRevoke' : 'portalAllow', [mac]);
+      pushToast(r.msg, r.ok ? 'success' : 'error');
+    } else if (act === 'forget') {
+      const r = await op('forgetDevice', [mac]);
+      pushToast(r.msg, r.ok ? 'success' : 'error');
+    }
+    await pullState();
+  }
+  async function setDevType(key: string): Promise<void> {
+    const mac = menuMac();
+    closeMenu();
+    if (!mac) return;
+    await op('setDeviceType', [mac, key]);
+    pushToast(tr('已更新设备类型'), 'success');
+    await pullState();
+  }
+  async function submitRename(): Promise<void> {
+    const mac = promptMac();
+    const v = promptValue();
+    closeModal();
+    if (mac && v.trim()) {
+      const r = await op('setDeviceName', [mac, v.trim()]);
+      pushToast(r.msg, r.ok ? 'success' : 'error');
+      await pullState();
+    }
+  }
+
+  // ---- 门户 ----
+  function portalPatch(): Record<string, any> {
+    const r = rr();
+    return {
+      portal_enabled: !!r.portal_enabled,
+      portal_dns: !!r.portal_dns,
+      portal_template: r.portal_template || 'aurora',
+      portal_title: r.portal_title || '',
+      portal_notice: r.portal_notice || '',
+      portal_button: r.portal_button || '',
+      portal_password: r.portal_password || '',
+      portal_schedule_start: Number(r.portal_schedule_start) || 0,
+      portal_schedule_end: Number(r.portal_schedule_end) || 24,
+    };
+  }
+  async function portalSave(): Promise<void> {
+    const r = await op('saveConfigPatch', [portalPatch()]);
+    pushToast(r.ok ? tr('已保存') : r.msg, r.ok ? 'success' : 'error');
+    await pullState();
+  }
+  async function portalStart(): Promise<void> {
+    await op('saveConfigPatch', [portalPatch()]);
+    pushToast(tr('正在启动门户…'), 'info');
+    await op('portalStart');
+    await pullState();
+  }
+  async function portalStop(): Promise<void> {
+    await op('portalStop');
+    pushToast(tr('门户已停止'), 'info');
+    await pullState();
+  }
+
+  // ---- 统计 ----
+  async function loadReport(): Promise<void> {
+    const r = await op('getStatsReport');
+    if (r && r.ok) {
+      $setState('report', r);
+    } else {
+      pushToast((r && r.msg) || tr('统计读取失败'), 'error');
+    }
+  }
+  async function exportCsv(): Promise<void> {
+    const r = await op('exportCsv');
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+  }
+
+  // ---- 工具箱 ----
+  async function speedTest(): Promise<void> {
+    speedBusy = true;
+    pushToast(tr('正在测速…'), 'info');
+    await op('speedTest');
+    speedBusy = false;
+    await pullState();
+  }
+  async function shareToggle(on: boolean): Promise<void> {
+    await op(on ? 'shareStart' : 'shareStop');
+    await pullState();
+  }
+  async function pfAdd(): Promise<void> {
+    const lp = parseInt(pfLPort(), 10);
+    const cp = parseInt(pfCPort(), 10);
+    if (!lp || !pfIp().trim() || !cp) {
+      pushToast(tr('请填写完整端口转发信息'), 'error');
+      return;
+    }
+    const r = await op('pfAdd', [pfName().trim(), lp, pfIp().trim(), cp]);
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+    if (r.ok) {
+      $setState('pfName', '');
+      $setState('pfLPort', '');
+      $setState('pfIp', '');
+      $setState('pfCPort', '');
+    }
+    await pullState();
+  }
+  async function pfRemove(name: string): Promise<void> {
+    const r = await op('pfRemove', [name]);
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+    await pullState();
+  }
+
+  // ---- 二维码 / 诊断 / 复制 ----
+  async function showQr(): Promise<void> {
+    const r = await op('wifiQrcode');
+    if (r && r.ok) {
+      $setState('qrData', r.data);
+      $setState('modal', 'qr');
+    } else {
+      pushToast(r.msg, 'error');
+    }
+  }
+  async function finishDiag(): Promise<void> {
+    const r = await op('getDiagnose');
+    if (r && r.lines) {
+      $setState('diagLines', r.lines);
+    } else {
+      $setState('diagLines', []);
+    }
+    diagBusy = false;
+  }
+  function diagText(): string {
+    if (diagBusy()) return tr('正在收集…');
+    const lines = diagLines();
+    if (!lines.length) return tr('无输出');
+    let out = '';
+    for (const line of lines) {
+      if (out) {
+        out = out + '\n' + line;
+      } else {
+        out = line;
+      }
+    }
+    return out;
+  }
+
+  async function runDiag(): Promise<void> {
+    diagBusy = true;
+    $setState('diagLines', []);
+    await op('diagnose');
+    await new Promise((r) => setTimeout(r, 2200));
+    await finishDiag();
+  }
+  async function copyText(text: string): Promise<void> {
+    // Web：navigator.clipboard；Tk：无剪贴板（globalThis 判空，不碰 document/window 名）。
+    let done = false;
+    try {
+      const g: any = globalThis;
+      if (g.navigator && g.navigator.clipboard) {
+        await g.navigator.clipboard.writeText(text);
+        done = true;
+      }
+    } catch {
+      done = false;
+    }
+    if (done) {
+      pushToast(tr('已复制：{t}', { t: text }), 'success');
+    } else {
+      pushToast(text, 'info');
+    }
+  }
+
+  // ---- 主题 / 语言 ----
+  // Web 专属的属性应用被隔离成独立函数：导出器把它 stub 成 pass（Tk 没有
+  // html/css 主题概念），主题 state 翻转与后端保存照常执行——一个碰 DOM 的
+  // 函数坏了也不拖累同页其它 handler。
+  function applyThemeDom(): void {
+    document.documentElement.setAttribute('data-theme', theme());
+  }
+  async function toggleTheme(): Promise<void> {
+    const next = theme() === 'light' ? 'dark' : 'light';
+    $setState('theme', next);
+    applyThemeDom();
+    await op('setTheme', [next]);
+  }
+  async function switchLang(v: string): Promise<void> {
+    await op('setLanguage', [v]);
+    try {
+      const dictResp = await fetch('/api/op/getI18n', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"args":[]}',
+      });
+      const dict = await dictResp.json();
+      $setState('i18nTable', dict || {});
+    } catch {
+      /* ignore */
+    }
+    await pullState();
+  }
+
+  // ---- 定时关闭 / 临时密码 ---- ----
+  async function applyAutoStop(): Promise<void> {
+    const m = parseInt(autoStopMin(), 10) || 0;
+    const r = await op('scheduleStop', [m]);
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+    await pullState();
+  }
+  async function tempPwStart(): Promise<void> {
+    const h = parseFloat(tempHours()) || 1;
+    const r = await op('tempPasswordStart', [h]);
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+    await pullState();
+  }
+  async function tempPwStop(): Promise<void> {
+    const r = await op('tempPasswordStop');
+    pushToast(r.msg, 'success');
+    await pullState();
+  }
+
+  // ---- 配置导出 ----
+  async function exportConfig(): Promise<void> {
+    const r = await op('exportConfig');
+    pushToast(r.msg, r.ok ? 'success' : 'error');
+  }
+
+  // ---- 退出确认 / 浮窗 ----
+  function requestClose(): void {
+    const c = cfg();
+    if (c.confirm_exit_hotspot && hs().active) {
+      $setState('modal', 'exit');
+      return;
+    }
+    try {
+      const g: any = globalThis;
+      if (g.close) g.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  function openMini(): void {
+    const g: any = globalThis;
+    if (g.open) g.open('/mini', 'whm-mini', 'width=170,height=78');
+  }
+</script>
+
+<head>
+  <title>Windows热点管理器</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/public/style.css">
+  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+</head>
+
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="titlebar">
+  <div class="brand"><span class="logo">📡</span><span>Windows热点管理器</span></div>
+  <div class="tb-right">
+    <span class="badge {admin() ? 'ok' : 'warn'}">{admin() ? tr('管理员') : tr('非管理员')}</span>
+    <button class="icon-btn" title="{tr('切换浅色/深色')}" on:click={toggleTheme}>{theme() === 'light' ? '☀️' : '🌙'}</button>
+    <button class="icon-btn" title="{tr('统计')}" on:click={() => openModal('stats')}>📊</button>
+    <button class="icon-btn" title="{tr('工具箱')}" on:click={() => openModal('tools')}>🧰</button>
+    <button class="icon-btn" title="{tr('强制门户')}" on:click={() => openModal('portal')}>🌐</button>
+    <button class="icon-btn" title="{tr('迷你悬浮窗')}" on:click={openMini}>🎟️</button>
+    <button class="icon-btn" title="{tr('设置')}" on:click={() => { seedSettings(); openModal('settings'); }}>⚙️</button>
+    <button class="icon-btn" title="{tr('关闭')}" on:click={requestClose}>✕</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="panel left">
+    <div class="dial-wrap">
+      <div class="dial {hs().active && !busy ? 'on' : ''} {busy ? 'busy' : ''}" on:click={toggleHotspot}>
+        <svg viewBox="0 0 240 240">
+          <defs>
+            <linearGradient id="gradOn" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3fb950"/>
+              <stop offset="55%" stop-color="#58A6FF"/>
+              <stop offset="100%" stop-color="#a371f7"/>
+            </linearGradient>
+            <linearGradient id="gradOff" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#39404d"/>
+              <stop offset="100%" stop-color="#2a3140"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="120" cy="120" r="98"/>
+          <circle class="ring" cx="120" cy="120" r="98" transform="rotate(-90 120 120)"/>
+        </svg>
+        <div class="dial-inner">
+          <div class="dial-emoji">{hs().active ? '📶' : '📡'}</div>
+          <div class="dial-text">{dialText()}</div>
+          <div class="dial-sub">{dialSub()}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-line">
+      <span class="pill {busy ? 'busy' : hs().active ? 'on' : ''}">{pillText()}</span>
+      <span class="muted small">{remainText()}</span>
+      <span class="muted small">{hs().max_clients ? tr('上限 {n} 台', { n: hs().max_clients }) : ''}</span>
+      <span class="muted small">{hs().backend_label || ''}</span>
+    </div>
+
+    <div class="cred-card">
+      <div class="cred-row">
+        <span class="cred-k">{tr('名称')}</span>
+        <span class="cred-v">{hs().ssid || '—'}</span>
+        <button class="mini" title="{tr('复制')}" on:click={() => copyText(hs().ssid || '')}>📋</button>
+      </div>
+      <div class="cred-div"></div>
+      <div class="cred-row">
+        <span class="cred-k">{tr('密码')}</span>
+        <span class="cred-v mono" on:click={() => $setState('passShown', !passShown())}>{passText()}</span>
+        <button class="mini" title="{tr('扫码连接')}" on:click={showQr}>🔗</button>
+        <button class="mini" title="{tr('显示/隐藏')}" on:click={() => $setState('passShown', !passShown())}>👁</button>
+        <button class="mini" title="{tr('复制')}" on:click={() => copyText(hs().passphrase || '')}>📋</button>
+      </div>
+    </div>
+    <div class="cred-hint muted small">{tr('密码区：左键显示/隐藏，右键复制')}</div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-v">{stats().online || 0}</div>
+        <div class="stat-k">{tr('在线')}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-v down">{stats().down_text || '0 B/s'}</div>
+        <div class="stat-k">{tr('下行')}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-v up">{stats().up_text || '0 B/s'}</div>
+        <div class="stat-k">{tr('上行')}</div>
+      </div>
+    </div>
+
+    <div class="banner {showWarn() ? '' : 'hidden'}">
+      {caps()['block_reason'] || tr('本机未检测到可用的热点能力')}
+    </div>
+  </section>
+
+  <section class="panel right">
+    <div class="right-head">
+      <h2>{tr('设备')} <span class="chip">{onlineCount()}</span></h2>
+      <div class="right-actions">
+        <span class="chip chip-soft {portalSt().running ? (portalSt().dns ? 'on' : '') : 'hidden'}">{portalChipText()}</span>
+        <button class="mini" title="{tr('诊断')}" on:click={() => openModal('diag')}>🩺</button>
+        <button class="mini" title="{tr('刷新')}" on:click={refreshAll}>🔄</button>
+      </div>
+    </div>
+
+    <div class="device-list">
+      {#each devices() as d}
+      <div class="dev {d.online ? '' : 'offline'} {d.blocked ? 'blocked' : ''}">
+        <div class="dev-emoji">{d.emoji || '📶'}</div>
+        <div class="dev-main">
+          <div class="dev-name">
+            <span class="nm">{devName(d)}</span>
+            {#if d.blocked}
+            <span class="tag">{tr('已禁止')}</span>
+            {:else if d.online && d.allowed}
+            <span class="tag ok">{tr('已放行')}</span>
+            {/if}
+          </div>
+          <div class="dev-sub">{devSub(d)}</div>
+          <div class="dev-rate">
+            <span class="down">{d.online ? '↓ ' + (d.rate_down_text || '0 B/s') : ''}</span>
+            <span class="up">{d.online ? '↑ ' + (d.rate_up_text || '0 B/s') : ''}</span>
+          </div>
+        </div>
+        <button class="dev-more" on:click={() => openDevMenu(d.mac)}>⋯</button>
+      </div>
+      {/each}
+    </div>
+    <div class="empty {devices().length > 0 ? 'hidden' : ''}">
+      <div class="empty-emoji">📶</div>
+      <div class="empty-text">{tr('开启热点后，已连接的设备会显示在这里')}</div>
+    </div>
+  </section>
+</main>
+
+{#if menuMac()}
+<div class="menu">
+  <div class="menu-head">{menuTitle()}</div>
+  <button class="menu-item" on:click={() => devAction('rename')}>{tr('✏️ 重命名')}</button>
+  <div class="menu-sub">{tr('设备类型')}</div>
+  <div class="emoji-row">
+    {#each icons() as ic}
+    <button on:click={() => setDevType(ic.key)} title={ic.label}>{ic.label.charAt(0)}</button>
+    {/each}
+  </div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" on:click={() => devAction('block')}>{menuDev().blocked ? tr('✅ 恢复上网') : tr('🚫 禁止上网')}</button>
+  <button class="menu-item" on:click={() => devAction('portal')}>{menuDev().allowed ? tr('⛔ 取消放行') : tr('🌐 放行门户')}</button>
+  <button class="menu-item danger" on:click={() => devAction('forget')}>{tr('🗑️ 移除设备')}</button>
+</div>
+{/if}
+
+{#if modal() === 'settings'}
+<div class="modal">
+  <div class="modal-card">
+    <div class="modal-head"><h3>⚙️ {tr('设置')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>{tr('热点名称')}</label>
+        <input type="text" maxlength="32" placeholder="MyHotspot" bind:value={ssidField}>
+      </div>
+      <div class="field">
+        <label>{tr('密码（至少 8 位）')}</label>
+        <input type="text" maxlength="63" placeholder="12345678" bind:value={passField}>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>{tr('频段')}</label>
+          <select bind:value={bandField}>
+            <option value="auto">{tr('自动')}</option>
+            <option value="2.4">2.4 GHz</option>
+            <option value="5">5 GHz</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>{tr('控制后端')}</label>
+          <select bind:value={backendField}>
+            <option value="auto">{tr('自动选择')}</option>
+            <option value="winrt">{tr('移动热点 (WinRT)')}</option>
+            <option value="netsh">{tr('承载网络 (netsh)')}</option>
+          </select>
+        </div>
+      </div>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={autoStartField}><span>{tr('启动时自动开启热点')}</span></label>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={startWinField}><span>{tr('开机自启')}</span></label>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={closeTrayField}><span>{tr('关闭时最小化到托盘')}</span></label>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={confirmExitField}><span>{tr('退出时热点开启中 → 提醒确认')}</span></label>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={hotkeyField}><span>{tr('全局热键 Ctrl+Alt+H 开关热点')}</span></label>
+      <div class="field-row">
+        <div class="field">
+          <label>{tr('临时密码（到期自动恢复原密码）')}</label>
+          <div class="field-row">
+            <select bind:value={tempHours} style="flex:1">
+              <option value="1">{tr('1 小时')}</option>
+              <option value="2">{tr('2 小时')}</option>
+              <option value="4">{tr('4 小时')}</option>
+              <option value="8">{tr('8 小时')}</option>
+              <option value="24">{tr('24 小时')}</option>
+            </select>
+            <button class="btn primary" on:click={tempPwStart}>{tr('生成')}</button>
+            <button class="btn ghost" on:click={tempPwStop}>{tr('取消')}</button>
+          </div>
+          <div class="hint">{tempHint()}</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>{tr('配置备份')}</label>
+          <div class="modal-foot" style="justify-content:flex-start">
+            <button class="btn ghost" on:click={exportConfig}>{tr('导出配置')}</button>
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>{tr('语言')} / Language</label>
+          <select bind:value={cfgLang} on:change={() => switchLang(cfgLang())}>
+            <option value="auto">{tr('跟随系统')}</option>
+            <option value="zh_CN">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>{tr('定时关闭（分钟，0=取消）')}</label>
+          <select bind:value={autoStopMin}>
+            <option value="0">{tr('不定时')}</option>
+            <option value="15">{tr('15 分钟')}</option>
+            <option value="30">{tr('30 分钟')}</option>
+            <option value="60">{tr('1 小时')}</option>
+            <option value="120">{tr('2 小时')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>　</label>
+          <button class="btn ghost" on:click={applyAutoStop}>{tr('应用定时')}</button>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" on:click={applyNow}>{tr('立即下发配置')}</button>
+        <button class="btn primary" on:click={saveSettings}>{tr('保存')}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'portal'}
+<div class="modal">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🌐 {tr('强制门户')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={rr.portal_enabled}><span>{tr('开启强制门户（连上先看欢迎页，同意后放行）')}</span></label>
+      <label class="switch-row"><input type="checkbox" class="switch" bind:checked={rr.portal_dns}><span>{tr('DNS 劫持（设备自动弹出门户页）')}</span></label>
+      <div class="field-row">
+        <div class="field">
+          <label>{tr('页面模板')}</label>
+          <select bind:value={rr.portal_template}>
+            <option value="aurora">{tr('极光')}</option>
+            <option value="ocean">{tr('海风')}</option>
+            <option value="corporate">{tr('商务')}</option>
+            <option value="minimal">{tr('极简')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>{tr('按钮文字')}</label>
+          <input type="text" placeholder="同意并开始上网" bind:value={rr.portal_button}>
+        </div>
+      </div>
+      <div class="field">
+        <label>{tr('标题')}</label>
+        <input type="text" placeholder="欢迎接入 &#123;&#123;ssid&#125;&#125;" bind:value={rr.portal_title}>
+      </div>
+      <div class="field">
+        <label>{tr('须知')}</label>
+        <textarea rows="3" placeholder="使用须知，每行一条" bind:value={rr.portal_notice}></textarea>
+      </div>
+      <div class="field">
+        <label>{tr('访问密码（空=不需要）')}</label>
+        <input type="text" placeholder="访客需输入此密码才能看到欢迎页" bind:value={rr.portal_password}>
+      </div>
+      <div class="hint">{portalStatusText()}</div>
+      <div class="modal-foot">
+        <button class="btn ghost" on:click={portalSave}>{tr('保存')}</button>
+        <button class="btn ghost" on:click={portalStop}>{tr('停止')}</button>
+        <button class="btn primary" on:click={portalStart}>{tr('启动')}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'stats'}
+<div class="modal">
+  <div class="modal-card">
+    <div class="modal-head"><h3>📊 {tr('流量统计')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <div class="stat-row">
+        <div class="stat"><div class="stat-v">{(report() || {}).grand ? report().grand.total : '—'}</div><div class="stat-k">{tr('累计')}</div></div>
+        <div class="stat"><div class="stat-v down">{(report() || {}).grand ? report().grand.rx : '—'}</div><div class="stat-k">{tr('接收')}</div></div>
+        <div class="stat"><div class="stat-v up">{(report() || {}).grand ? report().grand.tx : '—'}</div><div class="stat-k">{tr('发送')}</div></div>
+      </div>
+      <div class="field"><label>{tr('每日流量')}</label>
+        <div class="bar-chart">
+          {#each ((report() || {}).daily || []) as day}
+          <div class="bar-col">
+            <span class="bar-val">{day.total_text}</span>
+            <div class="bar-track"><div class="bar-fill" style="height:{String(Math.max(2, Math.round((day.rx + day.tx) * 100)))}%"></div></div>
+            <span class="bar-day">{String(day.day).slice(5)}</span>
+          </div>
+          {/each}
+        </div>
+      </div>
+      <div class="field"><label>{tr('流量 TOP 设备')}</label>
+        <div class="top-list">
+          {#each ((report() || {}).top || []) as tp, i}
+          <div class="top-item"><span class="top-rank">{i + 1}</span><span class="top-name">{tp.name}</span><span class="size">{tp.total_text}</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="field"><label>{tr('域名排行')}</label>
+        <div class="top-list">
+          {#each ((report() || {}).top_domains || []) as dm}
+          <div class="top-item"><span class="top-name">{dm.domain}</span><span class="size">{tr('{n} 次', { n: dm.c })}</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="field"><label>{tr('最近 DNS 访问')}</label>
+        <div class="query-list">
+          {#each (((report() || {}).queries || []).slice(0, 40)) as q}
+          <div class="query-item"><span class="q-time">{q.time_text}</span><span class="top-name">{q.domain}</span><span class="size">{q.name || q.ip || ''}</span></div>
+          {/each}
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" on:click={exportCsv}>{tr('导出 CSV（30 天明细）')}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'tools'}
+<div class="modal">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🧰 {tr('工具箱')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>{tr('网速测试（本机下载速率）')}</label>
+        <div class="field-row">
+          <button class="btn primary" on:click={speedTest}>{speedBusy ? tr('正在测速…') : tr('开始测速')}</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>{tr('文件共享（手机浏览器直接互传文件）')}</label>
+        <div class="hint">{shareText()}</div>
+        <div class="modal-foot" style="justify-content:flex-start">
+          <button class="btn primary" on:click={() => shareToggle(true)}>{tr('启动')}</button>
+          <button class="btn ghost" on:click={() => shareToggle(false)}>{tr('停止')}</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>{tr('端口转发（TCP）')}</label>
+        <div class="field-row">
+          <input type="text" placeholder="{tr('名称')}" bind:value={pfName} style="max-width:110px">
+          <input type="number" placeholder="{tr('本机端口')}" bind:value={pfLPort} style="max-width:100px">
+          <input type="text" placeholder="{tr('设备 IP')}" bind:value={pfIp} style="max-width:120px">
+          <input type="number" placeholder="{tr('设备端口')}" bind:value={pfCPort} style="max-width:100px">
+          <button class="btn primary" on:click={pfAdd}>{tr('添加')}</button>
+        </div>
+        <div class="top-list">
+          {#each portRules() as rule}
+          <div class="top-item">
+            <span class="top-name">{rule.name}：{rule.listen_port} → {rule.connect_ip}:{rule.connect_port}</span>
+            <button class="mini" on:click={() => pfRemove(rule.name)}>🗑️</button>
+          </div>
+          {/each}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'qr'}
+<div class="modal">
+  <div class="modal-card small">
+    <div class="modal-head"><h3>🔗 {tr('扫码连接')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body" style="align-items:center;text-align:center">
+      <img alt="WiFi 二维码" src={qrData()} style="width:220px;height:220px;border-radius:12px;background:#fff;padding:8px">
+      <div class="hint">{tr('手机相机扫码即可连接，无需输入密码')}</div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'diag'}
+<div class="modal">
+  <div class="modal-card">
+    <div class="modal-head"><h3>🩺 {tr('诊断')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <pre class="diag">{diagText()}</pre>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'prompt'}
+<div class="modal">
+  <div class="modal-card small">
+    <div class="modal-head"><h3>{promptTitle() || tr('输入')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body">
+      <input type="text" class="full" bind:value={promptValue}>
+      <div class="modal-foot">
+        <button class="btn ghost" on:click={closeModal}>{tr('取消')}</button>
+        <button class="btn primary" on:click={submitRename}>{tr('确定')}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+{#if modal() === 'exit'}
+<div class="modal">
+  <div class="modal-card small">
+    <div class="modal-head"><h3>⚠️ {tr('热点仍在运行')}</h3><button class="icon-btn" on:click={closeModal}>✕</button></div>
+    <div class="modal-body" style="text-align:center">
+      <div class="hint" style="margin-bottom:14px">{tr('热点开启中，退出后设备将无法上网。确定退出吗？')}</div>
+      <div class="modal-foot" style="justify-content:center">
+        <button class="btn ghost" on:click={closeModal}>{tr('返回')}</button>
+        <button class="btn primary" on:click={closeModal}>{tr('确认退出')}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{/if}
+
+<div class="toasts">
+  {#each toasts() as tt}
+  <div class="toast {tt.kind}">{tt.text}</div>
+  {/each}
+</div>

@@ -1,0 +1,13 @@
+<script>
+  // 请求拦截（等价原版 webui/app.py 的启动装配）。
+  //
+  // 注意：`rosezm build` 的 prerender 会对每个静态路由调用本中间件（build 时间
+  // 与运行时间共用同一 server bundle），所以后端的启动不放这里——放这里会让
+  // 构建期拉起整个流量引擎 / PowerShell 探测，既拖慢构建又让事件循环挂着定时器
+  // 不退出。真正的启动点：
+  //   * serve / preview / dev → 第一个 /api/* 请求（api 路由内部
+  //     ensureBackend()，幂等、每 worker 一次）。
+  export async function handle(request: Request) {
+    // 预留：本应用无需每请求鉴权/改写。语言协商由前端在 /api/state 拉取后自行处理。
+  }
+</script>

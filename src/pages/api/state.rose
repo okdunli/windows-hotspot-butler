@@ -1,0 +1,10 @@
+<script>
+  // 状态轮询（等价原版 get_state()，前端每 1.2s 拉一次，读内存快照）。
+  // 直接 import 项目内本地 TS 模块 —— 由框架 BN-6 修复（相对 specifier 重定位）。
+  import { ensureBackend, apiCall } from '../../server/index.ts';
+
+  export async function GET() {
+    await ensureBackend();
+    return apiCall('getState');
+  }
+</script>
