@@ -1,0 +1,19 @@
+# Windows Hotspot Butler —— Python 依赖说明
+#
+# 前端是 Rosezm（Node/TypeScript），这部分由 package.json 管理（npm install）；
+# 这里只列桌面壳（pywebview 窗口 + 业务后端）需要的 Python 包。
+
+# 桌面窗口（pywebview + Edge WebView2）
+pywebview>=5.0
+
+# 系统托盘（关闭时最小化到托盘；pystray 是软依赖，缺失则托盘功能降级）
+pystray>=0.19
+Pillow>=10.0.0
+
+# WiFi 二维码（扫码连接功能）
+qrcode>=7.4
+
+# 精确流量统计（可选）：每台设备的上行/下行抓包
+# 抓包驱动需另装 Npcap（勾选 "Install Npcap in WinPcap API-compatible Mode"）
+# https://npcap.com/#download
+scapy>=2.5.0
