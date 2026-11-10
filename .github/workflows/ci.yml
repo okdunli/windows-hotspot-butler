@@ -16,6 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # the 1:1 parity gate reads the original business package straight
+          # from the git objects, so the full history has to be there
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

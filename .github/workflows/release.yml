@@ -58,7 +58,7 @@ jobs:
           New-Item -ItemType Directory -Force $stage | Out-Null
           Copy-Item $exe "$stage/WiFiHotspotManager.exe"
           Copy-Item README.md "$stage/README.md"
-          Compress-Archive -Path "$stage/*" -DestinationPath "WindowsHotspot Butler-$env:GITHUB_REF_NAME.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath "WindowsHotspotButler-$env:GITHUB_REF_NAME.zip"
           Get-ChildItem *.zip | Select-Object Name, Length
 
       - name: Generate release notes
