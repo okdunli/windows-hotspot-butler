@@ -1,0 +1,127 @@
+"""系统托盘：关闭窗口时最小化到托盘（可选），托盘菜单可显示/退出。
+
+pystray 为软依赖：未安装时 close_to_tray 自动降级为直接退出。
+托盘线程为 daemon，主窗口 destroy 后由 pywebview 的退出逻辑自然收尾。
+"""
+from __future__ import annotations
+
+import logging
+import threading
+from typing import Callable, Optional
+
+log = logging.getLogger(__name__)
+
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+
+    HAS_DEPS = True
+except ImportError:
+    HAS_DEPS = False
+
+from .i18n import t
+
+
+def _icon_image():
+    """托盘图标：优先加载设计的盾牌 WiFi 图标（SVG 渲染的 PNG，缩放到 64×64）。
+    Pillow 不可用或 PNG 缺失时，回退到原有的纯 WiFi 手绘。"""
+    png = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
+    if HAS_DEPS and png.exists():
+        try:
+            img = Image.open(png).convert("RGBA")
+            if img.size != (64, 64):
+                img = img.resize((64, 64), Image.LANCZOS)
+            return img
+        except Exception:
+            log.debug("加载图标 PNG 失败，回退到手绘 WiFi", exc_info=True)
+    if HAS_DEPS:
+        # 回退：64x64 的 WiFi 信号托盘图标，弧线居中放大，避免偏下显得小。
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        cx, cy = 32, 42          # 圆心（顶点/圆点位置），弧线向上展开
+        for r in (12, 24, 36):   # 三道弧，最外圈几乎顶满画布
+            bbox = [cx - r, cy - r, cx + r, cy + r]
+            d.arc(bbox, start=225, end=315, fill=(88, 166, 255, 255), width=7)
+        d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(88, 166, 255, 255))
+        return img
+    return None
+
+
+class TrayIcon:
+    """托盘图标。show/hide 通过回调驱动主窗口（pywebview 线程安全封装见 app.py）。"""
+
+    def __init__(self, on_show: Callable[[], None], on_exit: Callable[[], None],
+                 tooltip: str = "") -> None:
+        self._on_show = on_show
+        self._on_exit = on_exit
+        self._tooltip = tooltip
+        self._icon: Optional["pystray.Icon"] = None
+        if not HAS_DEPS:
+            log.info("pystray/Pillow 未安装，托盘功能不可用（pip install pystray pillow）")
+            return
+        self._build()
+
+    def _build(self) -> None:
+        """构建 pystray 图标（菜单文案此刻快照；切语言后需 rebuild()）。"""
+        self._icon = pystray.Icon(
+            "WifiHotspotManager", _icon_image(), self._tooltip or t("WiFi 热点管理器"),
+            menu=pystray.Menu(
+                # pystray 动态文案 lambda 会收到菜单项自身作第一个参数，必须接收
+                pystray.MenuItem(lambda item: t("显示主界面"),
+                                 lambda: self._safe(self._on_show), default=True),
+                pystray.MenuItem(lambda item: t("退出"),
+                                 lambda: self._safe(self._on_exit)),
+            ),
+        )
+
+    @staticmethod
+    def _safe(fn: Callable[[], None]) -> None:
+        try:
+            fn()
+        except Exception:
+            log.exception("托盘回调异常")
+
+    @property
+    def available(self) -> bool:
+        return self._icon is not None
+
+    def start(self) -> None:
+        if self._icon is not None:
+            threading.Thread(target=self._icon.run, name="whm-tray", daemon=True).start()
+
+    def stop(self) -> None:
+        if self._icon is not None:
+            try:
+                self._icon.stop()
+            except Exception:
+                log.debug("托盘停止异常", exc_info=True)
+            self._icon = None
+
+    def rebuild(self) -> None:
+        """切语言后重建托盘：旧图标销毁（图标从托盘区消失再重画），
+        用当前 t() 文案重新构建并启动。文案是构建时快照，无法原地更新。"""
+        if not HAS_DEPS:
+            return
+        old = self._icon
+        self._icon = None
+        if old is not None:
+            try:
+                old.stop()
+            except Exception:
+                log.debug("旧托盘停止异常", exc_info=True)
+        self._build()
+        self.start()
+
+    def notify(self, text: str) -> None:
+        if self._icon is not None:
+            try:
+                self._icon.notify(text, t("WiFi 热点管理器"))
+            except Exception:
+                log.debug("托盘通知异常", exc_info=True)
+
+    def set_tooltip(self, text: str) -> None:
+        if self._icon is not None:
+            try:
+                self._icon.title = text
+            except Exception:
+                log.debug("托盘提示更新失败", exc_info=True)
