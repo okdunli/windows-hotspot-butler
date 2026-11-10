@@ -1,0 +1,104 @@
+# 在真实 Windows 上跑 exe 黑盒验收 + 实跑证据（云端 Windows，无需本机 Windows）
+#
+# GitHub 托管的 windows-latest 以 Administrator 身份运行，能在真正的 Windows
+# 内核上执行 BuildExe + smoke_exe + 自检，从而回答「exe 是否还会重启 / 出不出界面」。
+#
+# 用法（仓库推到 GitHub 后）：
+#   Actions → "Windows evidence" → Run workflow
+# 产物：Artifacts → whm-evidence（含 evidence/exe_smoke.json 等）
+#
+# 说明：
+#  - 云端 VM 通常没有无线网卡，WinRT/netsh/ICS 真实热点探测可能 FAIL/SKIP —— 这是
+#    诚实结果，不代表代码 bug。真正关键的是 evidence/exe_smoke.json：
+#    单实例无递归、banner 仅 1 次、--probe-ui 的 widgets=92、窗口是否找到。
+#  - 所有步骤 continue-on-error，保证 exe_smoke 与产物一定产出，便于回传。
+name: Windows evidence
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "python-app/**"
+      - "build_exe.py"
+      - ".github/workflows/windows-evidence.yml"
+
+jobs:
+  evidence:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build exe (onedir)
+        run: python python-app/build_exe.py
+
+      - name: exe black-box smoke (recursion / banner / widgets / window)
+        run: python python-app/smoke_exe.py
+        continue-on-error: true
+
+      - name: Read-only self-test
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          python python-app/run.py --selftest --port 8787 *> evidence/selftest.txt
+          if (Test-Path python-app/windows_selftest_report.json) {
+            Copy-Item python-app/windows_selftest_report.json evidence/selftest_report.json
+          }
+        continue-on-error: true
+
+      - name: Real hotspot toggle (idempotent restore)
+        run: |
+          python python-app/run.py --selftest --apply --port 8787 *> evidence/selftest_apply.txt
+          if (Test-Path python-app/windows_selftest_report.json) {
+            Copy-Item python-app/windows_selftest_report.json evidence/selftest_apply_report.json
+          }
+        continue-on-error: true
+
+      - name: Desktop UI probe (界面资源齐备)
+        run: |
+          python python-app\run.py --probe-ui *> evidence\desktop_probe.txt
+          if (Test-Path python-app\desktop_probe_report.json) {
+            Copy-Item python-app\desktop_probe_report.json evidence\desktop_probe_report.json
+          }
+        continue-on-error: true
+
+      - name: Verify + pack
+        run: |
+          python python-app/verify_evidence.py evidence | Tee-Object evidence/verdict.txt
+          python python-app/pack_evidence.py
+        continue-on-error: true
+
+      - name: Summarize exe smoke (key result)
+        if: always()
+        run: |
+          $p = "evidence/exe_smoke.json"
+          if (Test-Path $p) {
+            $j = Get-Content $p -Raw | ConvertFrom-Json
+            "## exe black-box result: $($j.verdict)" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            foreach ($c in $j.checks) {
+              "- [$($c.status)] $($c.name): $($c.detail)" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            }
+            Get-Content $p -Raw
+          } else {
+            "exe_smoke.json missing (build/smoke step failed)" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          }
+        continue-on-error: true
+
+      - name: Upload evidence (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whm-evidence
+          path: |
+            evidence/
+            whm-evidence-*.zip
+          if-no-files-found: warn

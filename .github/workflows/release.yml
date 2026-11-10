@@ -1,0 +1,74 @@
+name: Release
+
+# A pushed tag is the release trigger:
+#   detect (same gates as CI) -> build the single-file exe on Windows
+#   -> zip it -> generate the notes from the commit subjects -> publish a
+#      pre-release with the archive attached.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the notes need every tag and the commits between them
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install desktop shell dependencies
+        run: python -m pip install --upgrade pip -r requirements.txt
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Detect (same gates as CI)
+        run: python python-app/health_check.py
+
+      - name: Build single-file exe
+        run: python python-app/build_exe.py --onefile
+
+      - name: Pack the exe into a zip
+        shell: pwsh
+        run: |
+          $exe = "python-app/dist/WiFiHotspotManager.exe"
+          if (-not (Test-Path $exe)) { throw "exe not found: $exe" }
+          $stage = "whm-package"
+          Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item $exe "$stage/WiFiHotspotManager.exe"
+          Copy-Item README.md "$stage/README.md"
+          Compress-Archive -Path "$stage/*" -DestinationPath "WindowsHotspot Butler-$env:GITHUB_REF_NAME.zip"
+          Get-ChildItem *.zip | Select-Object Name, Length
+
+      - name: Generate release notes
+        run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > notes.md
+
+      - name: Publish the pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: |
+            *.zip
+          # every release so far ships as a pre-release
+          prerelease: true
