@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- 透明抠色：渐变只能画在 .card 上（body 背景会毁掉 WebView2 透明）。
+     交互：左图标=开关热点，右箭头=回主界面；三态 off/busy/on。 -->
+<style>
+:root{
+  --text:#eaf0ff;--muted:#8b949e;--n:#58A6FF;--accent:#58A6FF;--bg1:#11151f;--bg2:#1c2336;
+  --green:#3fb950;
+}
+html[data-theme="light"]{
+  --text:#1c2333;--muted:#5d6a7e;--n:#2f6fed;--accent:#2f6fed;--bg1:#ffffff;--bg2:#f0f4fa;
+  --green:#1a7f37;
+}*{box-sizing:border-box;margin:0;padding:0;user-select:none}
+/* 160×64，与 app.py MINI_W/H 同步。html 也铺同渐变（v7/v9：透明 html+Region
+   会杀死点击）——.card 10px 圆角外露的角缝由 html 渐变补色，无缝；
+   原生窗口已做圆角，web 层不再画圆角/边框，避免双层重叠 */
+html{width:160px;height:64px;overflow:hidden;
+     background:linear-gradient(135deg,var(--bg1),var(--bg2))}
+body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
+.card{
+  width:100%;height:100%;
+  font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);
+  background:linear-gradient(135deg,var(--bg1),var(--bg2));
+  display:flex;align-items:center;padding:0 4px 0 5px;gap:8px;cursor:default;
+  transition:background .3s ease,color .3s ease;
+}
+/* 左：开关按钮；svg 上移 1.5px 补偿字形重心偏下 */
+.sig{position:relative;width:36px;height:36px;flex:none;display:grid;place-items:center;
+     border-radius:12px;cursor:pointer;transition:background .15s}
+.sig svg{transform:translateY(-1.5px)}
+.sig:hover{background:rgba(88,166,255,.12)}
+.sig svg{width:24px;height:24px;display:block;color:var(--muted);transition:color .25s}
+.card.busy .sig svg{color:var(--accent)}
+.card.on .sig svg{color:var(--green)}
+.ring{position:absolute;inset:1px;border-radius:50%;border:2px solid transparent;pointer-events:none}
+.card.busy .ring{border-top-color:var(--accent);animation:spin 1s linear infinite}
+.card.on .ring{border-color:var(--green)}
+.card:not(.on):not(.busy) .ring{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.info{flex:1;min-width:0;line-height:1.3}
+.row1{display:flex;align-items:baseline;gap:3px}
+.n{font-size:14px;font-weight:700;color:var(--n)}
+.nlabel{font-size:9.5px;color:var(--muted)}
+.down,.up{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.down b,.up b{font-weight:600}
+.down b{color:#3fb950}
+.up b{color:#d29922}
+html[data-theme="light"] .down b{color:#1a7f37}
+html[data-theme="light"] .up b{color:#9a6700}
+/* 热点未开启：数值全灰 */
+.card:not(.on):not(.busy) .down b,
+.card:not(.on):not(.busy) .up b,
+.card:not(.on):not(.busy) .n{color:var(--muted)}
+.exp{width:22px;height:22px;flex:none;border-radius:7px;display:grid;place-items:center;
+     cursor:pointer;color:var(--muted);transition:background .15s,color .15s}
+.exp:hover{background:rgba(88,166,255,.12);color:var(--accent)}
+.exp svg{width:14px;height:14px;display:block}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="sig" id="toggle" title="点击 开/关 热点">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.2" stroke-linecap="round">
+      <path d="M4 11.5a12 12 0 0 1 16 0"/><path d="M7.5 15a7 7 0 0 1 9 0"/>
+      <circle cx="12" cy="18.5" r="1.4" fill="currentColor" stroke="none"/>
+    </svg>
+    <div class="ring"></div>
+  </div>
+  <div class="info">
+    <div class="row1"><span class="n" id="n">0</span><span class="nlabel" id="nlabel">台在线</span></div>
+    <div class="up" id="up">上行 ↑ <b>0 B/s</b></div>
+    <div class="down" id="down">下行 ↓ <b>0 B/s</b></div>
+  </div>
+  <div class="exp" id="expand" title="返回主界面">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 6 15 12 9 18"/>
+    </svg>
+  </div>
+</div>
+<script>
+const fmt = (n) => {
+  let f = n, u = "B";
+  for (const x of ["KB","MB","GB"]) { if (f < 1024) break; f /= 1024; u = x; }
+  return (f < 10 && u !== "B" ? f.toFixed(1) : Math.round(f)) + " " + u;
+};
+// ---- i18n：从后端拉翻译表（en 模式非空，zh 模式为空表 = 中文原文） ----
+let I18N = {};
+let lastUp = 0, lastDown = 0;
+let lastLangKnown = null;             // 轮询检测语言变化 → 重拉字典热切换
+const t = (k, vars) => {
+  let s = I18N[k] || k;
+  if (vars) for (const key in vars) s = s.split("{" + key + "}").join(vars[key]);
+  return s;
+};
+// 字典到位后刷新静态文案与标题
+function applyStatic() {
+  const nl = document.getElementById("nlabel");
+  if (nl) nl.textContent = t("台在线");
+  const tg = document.getElementById("toggle");
+  if (tg) tg.title = t("点击 开/关 热点");
+  const ex = document.getElementById("expand");
+  if (ex) ex.title = t("返回主界面");
+  document.getElementById("up").innerHTML = t("上行 ↑ <b>{v}</b>", { v: fmt(lastUp) });
+  document.getElementById("down").innerHTML = t("下行 ↓ <b>{v}</b>", { v: fmt(lastDown) });
+}
+async function refreshI18n() {
+  try {
+    const dic = await window.pywebview.api.get_i18n();
+    I18N = dic || {};
+    applyStatic();
+  } catch (e) {}
+}
+async function initTheme() {
+  try {
+    const th = await window.pywebview.api.get_theme();
+    document.documentElement.setAttribute("data-theme", th === "light" ? "light" : "dark");
+  } catch (e) {}
+}
+// 三态状态机：off / busy（开关过渡，~15s 超时自恢复）/ on
+// active 与后端一致；busy 从点击时刻起，直到 mini_state 返回的 active 与目标一致。
+let lastActive = null;      // 上次已知 active
+let pendingTo = null;       // 点击后的目标状态（"on"/"off"），达成前保持 busy
+let busySince = 0;
+
+function applyState(active, busy) {
+  const card = document.getElementById("card");
+  card.classList.toggle("on", active && !busy);
+  card.classList.toggle("busy", busy);
+}
+async function tick() {
+  try {
+    const st = await window.pywebview.api.mini_state();
+    const active = !!st.active;
+    lastActive = active;
+    document.documentElement.setAttribute("data-theme", st.theme === "light" ? "light" : "dark");
+    // 语言热切换：mini_state.lang 与上次不同 → 重拉翻译表并刷新文案
+    if (st.lang && lastLangKnown && st.lang !== lastLangKnown) await refreshI18n();
+    lastLangKnown = st.lang || lastLangKnown;
+    document.getElementById("n").textContent = st.online || 0;
+    lastUp = st.up || 0; lastDown = st.down || 0;
+    document.getElementById("down").innerHTML = t("下行 ↓ <b>{v}</b>", { v: fmt(st.down || 0) });
+    document.getElementById("up").innerHTML = t("上行 ↑ <b>{v}</b>", { v: fmt(st.up || 0) });
+    const busy = pendingTo !== null && active !== (pendingTo === "on")
+                 && (Date.now() - busySince < 15000);  // 15s 超时兜底
+    if (pendingTo !== null && (!busy || active === (pendingTo === "on"))) pendingTo = null;
+    applyState(active, busy);
+  } catch (e) {}
+  setTimeout(tick, 1000);
+}
+// ---- 交互：左图标=开关，右按钮=回主界面 ----
+document.getElementById("toggle").addEventListener("click", (e) => {
+  e.stopPropagation();
+  try {
+    const target = !lastActive;
+    pendingTo = target ? "on" : "off";
+    busySince = Date.now();
+    applyState(lastActive, true);   // 立即进 busy（旋转圈）
+    window.pywebview.api.mini_toggle();
+  } catch (e) {}
+});
+document.getElementById("expand").addEventListener("click", (e) => {
+  e.stopPropagation();
+  try { window.pywebview.api.mini_restore_main(); } catch (e) {}
+});
+// ---- 拖拽：空白处按下即触发 Windows 原生拖拽（消息循环接管，轨迹=鼠标）； ----
+// ---- 按钮上按下不拖（点击留给按钮） ----
+window.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest(".sig") || e.target.closest(".exp")) return;
+  try { window.pywebview.api.mini_drag_start(); } catch (err) {}
+});
+window.addEventListener("pywebviewready", () => { initTheme(); refreshI18n(); tick(); });
+</script>
+</body>
+</html>

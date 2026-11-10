@@ -1,0 +1,55 @@
+:root{
+  --text:#eaf0ff;--muted:#8b949e;--n:#58A6FF;--accent:#58A6FF;--bg1:#11151f;--bg2:#1c2336;
+  --green:#3fb950;
+}
+html[data-theme="light"]{
+  --text:#1c2333;--muted:#5d6a7e;--n:#2f6fed;--accent:#2f6fed;--bg1:#ffffff;--bg2:#f0f4fa;
+  --green:#1a7f37;
+}*{box-sizing:border-box;margin:0;padding:0;user-select:none}
+/* 160×64，与 app.py MINI_W/H 同步。html 也铺同渐变（v7/v9：透明 html+Region
+   会杀死点击）——.card 10px 圆角外露的角缝由 html 渐变补色，无缝；
+   窗口 Region 11px（app.py）裁在边框线外 → 边框弧线完整 */
+html{width:160px;height:64px;overflow:hidden;
+     background:linear-gradient(135deg,var(--bg1),var(--bg2))}
+body{width:160px;height:64px;overflow:hidden;margin:0;background:transparent}
+.card{
+  width:100%;height:100%;border-radius:13px;
+  font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;color:var(--text);
+  background:linear-gradient(135deg,var(--bg1),var(--bg2));
+  border:1px solid rgba(88,166,255,.28);
+  display:flex;align-items:center;padding:0 4px 0 5px;gap:8px;cursor:default;
+  transition:background .3s ease,color .3s ease,border-color .3s ease;
+}
+html[data-theme="light"] .card{border-color:rgba(47,111,237,.35)}
+.card.on{border-color:rgba(63,185,80,.45)}
+/* 左：开关按钮；svg 上移 1.5px 补偿字形重心偏下 */
+.sig{position:relative;width:36px;height:36px;flex:none;display:grid;place-items:center;
+     border-radius:12px;cursor:pointer;transition:background .15s}
+.sig svg{transform:translateY(-1.5px)}
+.sig:hover{background:rgba(88,166,255,.12)}
+.sig svg{width:24px;height:24px;display:block;color:var(--muted);transition:color .25s}
+.card.busy .sig svg{color:var(--accent)}
+.card.on .sig svg{color:var(--green)}
+.ring{position:absolute;inset:1px;border-radius:50%;border:2px solid transparent;pointer-events:none}
+.card.busy .ring{border-top-color:var(--accent);animation:spin 1s linear infinite}
+.card.on .ring{border-color:var(--green)}
+.card:not(.on):not(.busy) .ring{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.info{flex:1;min-width:0;line-height:1.3}
+.row1{display:flex;align-items:baseline;gap:3px}
+.n{font-size:14px;font-weight:700;color:var(--n)}
+.nlabel{font-size:9.5px;color:var(--muted)}
+.down,.up{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.down b,.up b{font-weight:600}
+.down b{color:#3fb950}
+.up b{color:#d29922}
+html[data-theme="light"] .down b{color:#1a7f37}
+html[data-theme="light"] .up b{color:#9a6700}
+/* 热点未开启：数值全灰 */
+.card:not(.on):not(.busy) .down b,
+.card:not(.on):not(.busy) .up b,
+.card:not(.on):not(.busy) .n{color:var(--muted)}
+.exp{width:22px;height:22px;flex:none;border-radius:7px;display:grid;place-items:center;
+     cursor:pointer;color:var(--muted);transition:background .15s,color .15s}
+.exp:hover{background:rgba(88,166,255,.12);color:var(--accent)}
+.exp svg{width:14px;height:14px;display:block}

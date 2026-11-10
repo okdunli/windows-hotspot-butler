@@ -1,0 +1,103 @@
+/* ============================================================
+   自适应增强（非原版文件）
+   原版 index.html / style.css 保持逐字节 1:1；本文件由 server.py
+   在响应 /public/index.html 时注入（<link> + <script>）。
+
+   窗口缩放目标：
+     - 缩到很小：控件整体等比缩小、不重叠（双维度 clamp + 兜底细滚动）
+     - 拉高：左栏内容垂直居中，不留大块空白
+     - 圆圈开关随窗口宽高缩放（不只按宽度）
+     - 固定最小窗口尺寸由 pywebview min_size=(880,600) 保证；
+       本层再给 html/body 兜底 min-height，防平台忽略窗口级限制。
+   ============================================================ */
+
+/* ---- 0. 视口兜底 ---- */
+html, body { min-width: 760px; min-height: 520px; }
+
+/* ---- 1. 布局：左右自适应列宽 ---- */
+.layout {
+  grid-template-columns: minmax(0, 352fr) minmax(0, 640fr);
+  gap: clamp(8px, 1.4vw, 16px);
+  padding: clamp(8px, 1.4vw, 16px);
+  min-height: 0;
+}
+
+/* ---- 2. 左栏：垂直居中（拉高后不顶部堆大空白），
+       内容超高时细滚动兜底且隐藏滚动条 ---- */
+.panel.left {
+  overflow-y: auto;
+  overflow-x: hidden;
+  justify-content: center;
+  gap: clamp(6px, 1.1vh, 14px);
+  padding: clamp(10px, 1.6vh, 18px) clamp(10px, 1.4vw, 16px);
+  scrollbar-width: none;
+}
+.panel.left::-webkit-scrollbar { width: 0; height: 0; }
+.panel.left > * { flex: 0 0 auto; }
+.panel.left .device-list { min-height: 0; }
+.panel.right { justify-content: stretch; }
+.device-list { min-height: 0; }
+
+/* 右栏空态垂直居中：deviceList 为空时它仍占 flex:1，把 .empty 挤到底部。
+   用 :has() 判断"列表里没有任何 .dev 卡片"→ 隐藏列表，.empty 独占整栏居中。 */
+#deviceList:not(:has(.dev:not(.leaving))) { display: none; }
+
+/* ---- 3. 全控件按窗口宽高双维度缩放：--whm-scale 由 enhance.js
+       按 min(vw/1000, vh/680) 计算并写入，纯 CSS 无法同时感知两者 ---- */
+.dial, .dial svg {
+  width: clamp(140px, calc(238px * var(--whm-scale, 1)), 238px);
+  height: clamp(140px, calc(238px * var(--whm-scale, 1)), 238px);
+}
+.dial-inner { inset: clamp(14px, calc(26px * var(--whm-scale, 1)), 26px); }
+.dial-emoji { font-size: clamp(22px, calc(40px * var(--whm-scale, 1)), 40px); }
+.dial-text  { font-size: clamp(11px, calc(15px * var(--whm-scale, 1)), 15px); }
+.dial-sub   { font-size: clamp(9px, calc(11px * var(--whm-scale, 1)), 11px); }
+.dial-wrap  { padding-top: clamp(0px, calc(6px * var(--whm-scale, 1)), 6px); }
+
+.status-line { gap: clamp(4px, calc(10px * var(--whm-scale, 1)), 10px); }
+.pill { font-size: clamp(10px, calc(12px * var(--whm-scale, 1)), 12px);
+        padding: clamp(2px, calc(4px * var(--whm-scale, 1)), 4px)
+                 clamp(6px, calc(12px * var(--whm-scale, 1)), 12px); }
+.cred-row { height: clamp(30px, calc(40px * var(--whm-scale, 1)), 40px);
+            gap: clamp(5px, calc(10px * var(--whm-scale, 1)), 10px); }
+.cred-k { font-size: clamp(10px, calc(12px * var(--whm-scale, 1)), 12px); }
+.cred-v { font-size: clamp(11px, calc(14px * var(--whm-scale, 1)), 14px); }
+.cred-hint { font-size: clamp(10px, calc(12px * var(--whm-scale, 1)), 12px);
+             margin-top: clamp(2px, calc(6px * var(--whm-scale, 1)), 6px); }
+.mini { width: clamp(20px, calc(26px * var(--whm-scale, 1)), 26px);
+        height: clamp(20px, calc(26px * var(--whm-scale, 1)), 26px);
+        font-size: clamp(10px, calc(12px * var(--whm-scale, 1)), 12px); }
+.stat-row { gap: clamp(4px, calc(8px * var(--whm-scale, 1)), 8px); }
+.stat { padding: clamp(5px, calc(10px * var(--whm-scale, 1)), 10px) 6px; }
+.stat-v { font-size: clamp(12px, calc(16px * var(--whm-scale, 1)), 16px); }
+.stat-k { font-size: clamp(9px, calc(11px * var(--whm-scale, 1)), 11px);
+          margin-top: clamp(1px, calc(3px * var(--whm-scale, 1)), 3px); }
+.spark-wrap { padding: clamp(3px, calc(6px * var(--whm-scale, 1)), 6px) 8px 2px; }
+.spark-wrap canvas { height: clamp(40px, calc(72px * var(--whm-scale, 1)), 72px); }
+.banner { font-size: clamp(10px, calc(12px * var(--whm-scale, 1)), 12px);
+          padding: clamp(5px, calc(10px * var(--whm-scale, 1)), 10px); }
+.right-head { flex-wrap: wrap; gap: 6px;
+              padding: clamp(8px, 1.4vh, 14px) clamp(10px, 1.4vw, 16px); }
+
+/* ---- 5. 版本号：标题栏常显徽标 + 设置弹窗版本行 / 开源链接 ---- */
+.app-ver {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  opacity: .8;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.version-row {
+  margin-top: 12px; text-align: center; font-size: 11px; color: var(--muted);
+  user-select: text; -webkit-user-select: text;
+}
+.version-row .v { font-weight: 600; color: var(--text); opacity: .75; }
+.version-row .repo-link { color: var(--accent); text-decoration: none; }
+.version-row .repo-link:hover { text-decoration: underline; }

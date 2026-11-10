@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{{title}}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg1:#0b1026;--bg2:#1b2350;--card:rgba(255,255,255,.08);
+    --border:rgba(255,255,255,.16);--text:#eaf0ff;--muted:#9aa7d4;
+    --accent:#5b8cff;--accent2:#7c5cff;
+  }
+  body{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(1100px 600px at 12% -10%,#3a2a8c 0%,transparent 60%),
+      radial-gradient(900px 500px at 100% 0%,#0f5ea8 0%,transparent 55%),
+      linear-gradient(160deg,var(--bg1),var(--bg2));
+  }
+  .wrap{width:100%;max-width:520px;animation:up .5s ease both}
+  @keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:22px;
+    padding:34px 30px;backdrop-filter:blur(18px);
+    box-shadow:0 24px 70px rgba(0,0,0,.45);
+  }
+  .logo{
+    width:62px;height:62px;border-radius:18px;margin-bottom:20px;
+    display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    box-shadow:0 10px 30px rgba(91,140,255,.45);
+  }
+  .logo svg{width:32px;height:32px}
+  .ssid{
+    display:inline-block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:5px 12px;margin-bottom:16px;
+  }
+  h1{font-size:25px;line-height:1.35;margin-bottom:10px}
+  .sub{color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:22px}
+  .notice{
+    background:rgba(0,0,0,.26);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:12px;padding:15px 16px;font-size:13.5px;line-height:1.85;
+    white-space:pre-line;color:#d5ddfb;margin-bottom:24px;
+  }
+  button{
+    width:100%;padding:15px;border:0;border-radius:14px;cursor:pointer;
+    font-size:16px;font-weight:600;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    box-shadow:0 12px 30px rgba(91,140,255,.35);transition:transform .16s ease,box-shadow .16s ease;
+  }
+  button:hover{transform:translateY(-2px);box-shadow:0 16px 38px rgba(91,140,255,.5)}
+  button:active{transform:translateY(0)}
+  .meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:20px;font-size:12px;color:var(--muted)}
+  .meta span{
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    border-radius:8px;padding:4px 10px;
+  }
+  footer{margin-top:18px;text-align:center;font-size:12px;color:rgba(154,167,212,.75)}
+  @media(max-width:420px){.card{padding:26px 20px}h1{font-size:21px}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+          <path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M8.5 16.4a6 6 0 0 1 7 0"/>
+          <path d="M2 8.82a15 15 0 0 1 20 0"/><circle cx="12" cy="20" r="1.2" fill="#fff"/>
+        </svg>
+      </div>
+      <div class="ssid">{{ssid}}</div>
+      <h1>{{title}}</h1>
+      <p class="sub">{{subtitle}}</p>
+      <div class="notice">{{notice}}</div>
+      <form method="post" action="/accept">
+        <button type="submit">{{button}}</button>
+      </form>
+      <div class="meta">
+        <span>已连接 {{clients}} 台设备</span>
+        <span>网关 {{gateway}}</span>
+        <span>{{time}}</span>
+      </div>
+    </div>
+    <footer>{{footer}}</footer>
+  </div>
+</body>
+</html>
