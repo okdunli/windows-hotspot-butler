@@ -44,7 +44,10 @@ def run(name: str, args: list[str]) -> tuple[str, str]:
     NOT_WINDOWS（当前环境无 Windows，属预期，不是失败）。"""
     r = subprocess.run([PY, "-u", *args], cwd=str(HERE.parent),
                        capture_output=True, text=True, timeout=300)
-    tail = (r.stdout + r.stderr).strip().split("\n")[-1][:120]
+    out = (r.stdout + r.stderr).strip()
+    # FAIL 时把最后 8 行都带出来：明细（MISSING/DIFFERENT 清单）在汇总行之前
+    tail = " | ".join(out.split("\n")[-8:])[:800] if r.returncode not in (0, 2) \
+        else out.split("\n")[-1][:400]
     if r.returncode == 2:
         return "SKIP", tail
     return ("PASS" if r.returncode == 0 else "FAIL"), tail

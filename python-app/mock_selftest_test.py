@@ -140,8 +140,16 @@ print('rc =', rc, '| PASS =', statuses.count('PASS'),
 for r in report['results']:
     if r['status'] == 'FAIL':
         print('  FAIL:', r['name'], '-', r['detail'][:200])
-assert rc == 0, 'self-test reported a FAIL under mocked Windows'
+if rc != 0:
+    # CI 上 health_check 只保留 tail，失败明细必须全量打出来才能诊断
+    import json as _j
+    print('FULL REPORT:', _j.dumps(report, ensure_ascii=False, indent=1))
+fails = [r for r in report['results'] if r['status'] == 'FAIL']
+assert rc == 0, 'self-test reported a FAIL under mocked Windows: ' + \
+    '; '.join(f"{r['name']}: {r['detail'][:120]}" for r in fails)
 skips = [r['name'] for r in report['results'] if r['status'] == 'SKIP']
-assert all('UDP 53' in n or 'DNS 劫持' in n for n in skips), f'unexpected SKIPs: {skips}'
+# 允许的 SKIP：真实端口探测在受限环境（非 root / 端口被占）下诚实降级
+assert all('UDP 53' in n or 'DNS 劫持' in n or 'HTTP 80' in n for n in skips), \
+    f'unexpected SKIPs: {skips}'
 print('SKIP (expected on non-root macOS):', skips)
 print('PASS: all Windows-only branches execute, report generated, no FAIL/SKIP')

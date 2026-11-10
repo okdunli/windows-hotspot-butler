@@ -14,6 +14,39 @@ import unittest.mock as mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+
+# ---- fake pystray / PIL：真实 pystray 在 macOS 上必须主线程创建图标，
+# 会直接 SIGTRAP 杀掉测试进程（rc=133）。托盘不是本测试的对象，
+# 与 mock_windows_test 相同的 fake 顶住。 ----
+import unittest.mock as _mock
+_fake_pystray = types.ModuleType("pystray")
+class _Icon:
+    def __init__(self, *a, **k): self.menu = None
+    def run(self): pass
+    def stop(self): pass
+class _MenuItem:
+    def __init__(self, *a, **k): pass
+class _Menu:
+    def __init__(self, *a, **k): self.items = []
+_fake_pystray.Icon = _Icon
+_fake_pystray.Menu = _Menu
+_fake_pystray.MenuItem = _MenuItem
+_fake_pil = types.ModuleType("PIL")
+_fake_pil_image = types.ModuleType("PIL.Image")
+_fake_pil_draw = types.ModuleType("PIL.ImageDraw")
+class _Img:
+    size = (64, 64)
+    def convert(self, *a): return self
+    def resize(self, *a, **k): return self
+_fake_pil_image.open = lambda *a, **k: _Img()
+_fake_pil_image.new = lambda *a, **k: _Img()
+_fake_pil_draw.Draw = lambda *a, **k: _mock.MagicMock()
+_fake_pil.Image = _fake_pil_image
+_fake_pil.ImageDraw = _fake_pil_draw
+sys.modules.setdefault("pystray", _fake_pystray)
+sys.modules.setdefault("PIL", _fake_pil)
+sys.modules.setdefault("PIL.Image", _fake_pil_image)
+sys.modules.setdefault("PIL.ImageDraw", _fake_pil_draw)
 sys.path.insert(0, str(HERE))
 import desktop_webview as D  # noqa: E402
 import server  # noqa: E402
@@ -59,32 +92,37 @@ def main() -> int:
     fake = types.ModuleType("webview")
     fake.create_window = lambda **kw: (wins.append(_Win(**kw)) or wins[-1])
     fake.start = lambda **kw: None
-    with mock.patch.dict(sys.modules, {"webview": fake}):
+    # mock 必须覆盖整个测试体：装了 pywebview 的环境（CI/开发机）里，
+    # main() 返回后 tray-poll 等后台线程若真去 import webview，
+    # GTK 会因无显示器抛 Xlib DisplayNameError。全程用 fake 顶住。
+    patches = (mock.patch.dict(sys.modules, {"webview": fake}),
+               mock.patch("sys.platform", "darwin"))
+    with patches[0], patches[1]:
         rc = D.main(["--port", "8811"])
-    assert rc == 0 and len(wins) == 1, (rc, len(wins))
-    b = server.get_backend()
-    assert wins[0].kw.get("js_api") is b, "主窗未挂共享 backend 单例"
-    assert wins[0].kw.get("width") == 1000 and wins[0].kw.get("height") == 620
-    assert wins[0].kw.get("min_size") == (880, 560)
-    print("  [PASS] 主窗 1000×620（min 880×560）+ js_api=共享 backend")
 
-    for h in ("_open_mini", "_close_mini", "_toggle_mini", "_boot_ready", "_app_ref"):
-        assert hasattr(b, h), f"缺浮窗钩子 {h}"
-    print("  [PASS] 原版 backend 浮窗钩子全部挂上")
+        assert rc == 0 and len(wins) == 1, (rc, len(wins))
+        b = server.get_backend()
+        assert wins[0].kw.get("js_api") is b, "主窗未挂共享 backend 单例"
+        assert wins[0].kw.get("width") == 1000 and wins[0].kw.get("height") == 620
+        assert wins[0].kw.get("min_size") == (880, 560)
+        print("  [PASS] 主窗 1000×620（min 880×560）+ js_api=共享 backend")
 
-    r1 = b.toggle_mini()
-    assert r1.get("shown") is True and len(wins) == 2, (r1, len(wins))
-    mw = wins[-1]
-    assert mw.kw.get("title") == "热点浮窗"
-    assert (mw.kw.get("width"), mw.kw.get("height")) == (160, 64)
-    assert mw.kw.get("on_top") is True and mw.kw.get("easy_drag") is False
-    assert mw.kw.get("frameless") is True and mw.kw.get("js_api") is b
-    print("  [PASS] 原生浮窗：160×64 / on_top / easy_drag=False / 共享 js_api")
+        for h in ("_open_mini", "_close_mini", "_toggle_mini", "_boot_ready", "_app_ref"):
+            assert hasattr(b, h), f"缺浮窗钩子 {h}"
+        print("  [PASS] 原版 backend 浮窗钩子全部挂上")
 
-    r2 = b.toggle_mini()
-    assert r2.get("shown") is False and mw.destroyed
-    print("  [PASS] 再次点击关闭并销毁浮窗")
+        r1 = b.toggle_mini()
+        assert r1.get("shown") is True and len(wins) == 2, (r1, len(wins))
+        mw = wins[-1]
+        assert mw.kw.get("title") == "热点浮窗"
+        assert (mw.kw.get("width"), mw.kw.get("height")) == (160, 64)
+        assert mw.kw.get("on_top") is True and mw.kw.get("easy_drag") is False
+        assert mw.kw.get("frameless") is True and mw.kw.get("js_api") is b
+        print("  [PASS] 原生浮窗：160×64 / on_top / easy_drag=False / 共享 js_api")
 
+        r2 = b.toggle_mini()
+        assert r2.get("shown") is False and mw.destroyed
+        print("  [PASS] 再次点击关闭并销毁浮窗")
     # app.js 不得再用 window.open popup 实现浮窗
     app_js = (HERE.parent / "public" / "app.js").read_text(encoding="utf-8")
     assert 'window.open("/mini"' not in app_js, "浮窗退回 popup 实现了"

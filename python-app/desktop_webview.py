@@ -529,8 +529,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # 托盘 tooltip 轮询（原版 desktop_native 的行为并入：热点状态 + 在线数）
     def _poll_tooltip() -> None:
-        import json as _json
-        import urllib.request as _u
+        try:  # import 也放进 try：测试 mock sys.modules 时线程退出要不吵不闹
+            import json as _json
+            import urllib.request as _u
+        except Exception:
+            return
         while True:
             try:
                 st = _json.loads(_u.urlopen(

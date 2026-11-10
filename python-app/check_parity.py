@@ -65,7 +65,8 @@ def main(argv: list[str]) -> int:
     expected = {r["file"] for r in m["files"]}
     for p in sorted(pkg.rglob("*")):
         if p.is_file() and "__pycache__" not in p.parts:
-            rel = str(p.relative_to(pkg))
+            # Windows 的 relative_to 用反斜杠；manifest 里是 POSIX 分隔符
+            rel = str(p.relative_to(pkg)).replace("\\", "/")
             if rel not in expected:
                 bad.append(f"EXTRA {rel}")
 

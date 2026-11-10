@@ -14,6 +14,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Windows runner 默认 stdout 编码是 GBK；测试大量打印中文，统一 UTF-8
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:

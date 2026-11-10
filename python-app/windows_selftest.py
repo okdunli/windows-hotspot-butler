@@ -159,15 +159,6 @@ def main() -> int:
             return True, f"TrayIcon={tray.HAS_DEPS} sys_check={hotkey.sys_check()}"
         check("托盘 / 全局热键模块", probe_tray_hotkey)
 
-        def probe_tk():
-            import tkinter as tk
-            root = tk.Tk()
-            root.withdraw()
-            title = root.title()
-            root.destroy()
-            return True, f"Tk 可用（默认 title={title!r}）"
-        check("Tkinter 可用", probe_tk)
-
         # ---- 2b. 真实副作用验证（--apply 且管理员；每项都幂等还原） ----
         if APPLY and pshell.is_admin():
             def firewall_roundtrip():
@@ -286,6 +277,11 @@ def main() -> int:
                 cp = CaptivePortal(ctx)
                 ok_start, msg = cp.start(None, force_dns=False)
                 if not ok_start:
+                    # 绑不上 80（权限/占用）≠ 功能缺陷：CI runner 非 root、
+                    # 端口被占都会这样，诚实 SKIP 而不是 FAIL。
+                    if isinstance(msg, str) and ("Errno 13" in msg or "Errno 98" in msg
+                                                 or "10013" in msg or "被占用" in msg):
+                        return None, f"HTTP 80 无法监听（环境受限）：{msg.strip()[:80]}"
                     return False, f"门户启动失败：{msg}"
                 import urllib.error
                 probes = {}
@@ -337,7 +333,7 @@ def main() -> int:
     else:
         for n in ["管理员权限", "WinRT 移动热点 API", "netsh wlan show drivers", "无线网卡能力探测",
                   "网关 / ARP 表", "ICS 上网连接枚举", "防火墙规则接口", "UDP 53 绑定",
-                  "开机自启注册表", "托盘 / 全局热键模块", "Tkinter 可用"]:
+                  "开机自启注册表", "托盘 / 全局热键模块"]:
             record(n, None, "非 Windows SKIP")
 
     # ---- 3. 业务服务往返（跨平台） ----

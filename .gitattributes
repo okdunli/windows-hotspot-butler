@@ -1,3 +1,8 @@
+# 其余文件不做任何 eol 转换：SHA-256 1:1 parity 检查按字节比对磁盘与
+# git 对象，checkout 时的 autocrlf 转换会让 Windows runner 上比对失败。
+# （注意：这条必须在 *.bat 规则之前，后面的属性行会覆盖前面的。）
+* -text
+
 # Windows 批处理必须保持 CRLF；cmd.exe 遇到 LF-only 的 .bat 会把行拆碎，
 # 表现是 "'tler' 不是内部或外部命令" 这类残片报错。
 *.bat text eol=crlf
