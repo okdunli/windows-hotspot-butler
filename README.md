@@ -1,247 +1,286 @@
 <div align="center">
-<img alt="Windows Hotspot Butler" src="icon.svg" height="128">
+<img alt="Windows热点管理器" src="icon.svg" height="128">
 
-<h1>Windows Hotspot Butler</h1>
+<h1>Windows热点管理器</h1>
 
-[![中文](https://img.shields.io/badge/中文-README-blue?style=for-the-badge&labelColor=000000)](README.zh-CN.md)
+[![English](https://img.shields.io/badge/English-README-blue?style=for-the-badge&labelColor=000000)](README.en.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green?style=for-the-badge&labelColor=000000)](LICENSE)
 
 </div>
 
-Windows Hotspot Butler is a WiFi hotspot management utility for Windows 10 / 11. Built on top of the Windows mobile hotspot and hosted network, it adds hotspot control, device identification, traffic accounting, a captive portal and a set of LAN utilities in a single desktop application.
+Windows热点管理器是一个面向 Windows 10 / 11 的 WiFi 热点管理工具。在系统移动热点与承载网络的基础上，提供热点控制、设备识别、流量统计、强制门户以及配套的局域网工具，全部集成在同一个桌面应用中。
 
-## Overview
+![主界面（热点已开启，实时设备与速率）](screenshots/01-dashboard.png)
 
-The mobile hotspot built into Windows offers only basic on/off control. It does not expose the connected devices, does not break down traffic per device, and provides no guest acceptance page, no per-device network access control, and no usage records.
+## 项目简介
 
-Windows Hotspot Butler fills those gaps:
+Windows 自带的移动热点仅提供基础的开关能力，无法查看接入设备、区分每台设备的流量占用，也不支持访客准入提示、单设备断网等管理操作。
 
-- unified control of hotspot startup, shutdown and parameters;
-- automatic identification of vendor and device type, with persistent per-device profiles;
-- upload/download accounting keyed by MAC address, with trend reports and export;
-- a captive portal that requires guests to acknowledge the usage notice before access is granted;
-- auxiliary tools: QR-code join, LAN file sharing, port forwarding and others.
+Windows热点管理器在系统能力之上补齐了这些部分：
 
-Intended for machines that serve as a hotspot regularly and where some control over the connected clients is wanted.
+- 统一管理热点的开启、关闭与参数配置；
+- 自动识别接入设备的厂商、类型，并保留历史档案；
+- 按 MAC 统计每台设备的上下行流量，提供趋势报表与导出；
+- 提供强制门户（Captive Portal），支持访客阅知后放行；
+- 附带扫码连接、文件共享、端口转发等常用辅助功能。
 
----
-
-## Features
-
-- **Hotspot control.** Two backends are supported — Windows mobile hotspot (WinRT) and hosted network (netsh) — selected automatically at startup from the adapter's actual capabilities, or pinned manually in the settings. SSID, password and band (2.4 GHz / 5 GHz / auto) are configurable, as are starting the hotspot automatically on launch and starting the application with Windows (a `HKCU\...\Run` registry entry).
-- **Device management.** The hotspot client list, the system ARP table and locally stored device profiles are merged into one view showing IP, MAC, hostname, vendor and device type. A built-in OUI database covers common phone, laptop, TV and IoT vendors, and randomized MACs (privacy addresses used by phones) are flagged separately. Names and types can be pinned by hand, after which automatic detection no longer overrides them. Individual devices can be denied internet access or removed from the roster; new arrivals raise a desktop notification and a tray balloon.
-- **Traffic accounting.** Three data sources are available — scapy capture, adapter counters and demo data — chosen automatically according to availability. In capture mode traffic is attributed per MAC, flushed to SQLite every five seconds, so totals survive restarts; the live rate graph keeps the last three minutes. The statistics view offers a 14-day trend, the top 8 devices by usage, a domain ranking and recent DNS lookups, plus CSV export (UTF-8 with BOM, opens cleanly in Excel).
-- **Captive portal.** With UDP 53 taken over, DNS lookups from devices not yet allowed are answered with the hotspot gateway address, while the connectivity probes used by iOS, Android and Windows (`/generate_204`, `/hotspot-detect.html`, `/ncsi.txt` and others) receive a 302 redirect so the operating system raises its sign-in prompt on its own. Four welcome page templates ship with the app (aurora, ocean, corporate, minimal); copy, an optional access password and an allowed time window are configurable. Acceptances persist by IP and MAC and can be granted or revoked manually. The portal follows the hotspot up and down by default.
-- **Utilities.** QR-code join (standard `WIFI:` format), LAN file sharing over HTTP on port 8081 with browser upload and download, port forwarding based on `netsh interface portproxy`, a download speed test against Cloudflare endpoints, temporary passwords that revert automatically when they expire, a scheduled hotspot shutdown, and configuration import/export.
-- **Interface.** A PyWebView + Edge WebView2 front end with dark/light themes and Chinese/English languages, a 160×64 always-on-top floating widget (draggable, position remembered), minimize-to-tray, and the global hotkey `Ctrl + Alt + H`. The legacy Tkinter interface is retained as a fallback via `--tk`.
+适用于需要长期使用热点、并希望对接入设备进行管理的场景。
 
 ---
 
-## Getting started
+## 功能特性
 
-### Requirements
+### 热点控制
 
-| Item | Requirement |
-|------|-------------|
-| OS | Windows 10 1607+ / Windows 11 |
-| Python | 3.10 or newer (3.12 recommended) |
-| Privileges | Run as Administrator — hotspot toggling, DNS hijacking and firewall rules all require it |
-| Optional driver | Npcap, installed with "WinPcap API-compatible Mode", required for accurate per-device traffic statistics |
+支持 Windows 移动热点（WinRT）与承载网络（netsh）两种后端，启动时依据网卡实际能力自动选择，也可在设置中手动指定。SSID、密码、频段（2.4 GHz / 5 GHz / 自动）均可配置；支持程序启动时自动开启热点，以及写入注册表 `HKCU\...\Run` 实现开机自启。
 
-### Installation
+![热点设置](screenshots/03-settings.png)
+
+### 设备管理
+
+合并热点客户端列表、系统 ARP 表与本地设备档案，实时展示每台设备的 IP、MAC、主机名、厂商与设备类型。内置 OUI 库覆盖常见手机、笔记本、电视、IoT 模组厂商，并对随机化 MAC（手机隐私地址）单独标注。设备名称与类型可手动指定，指定后不再被自动识别覆盖；支持单设备禁止上网、移除档案，新设备接入时推送桌面通知与托盘气泡。
+
+![设备操作](screenshots/02-devices.png)
+
+### 流量统计
+
+提供 scapy 抓包、网卡计数、演示数据三种数据源，按可用性自动降级。抓包模式下按 MAC 精确区分每台设备的上下行，每 5 秒落盘 SQLite，重启后可继续累计；实时速率曲线保留最近 3 分钟。统计界面提供 14 天用量趋势、用量 TOP 8 设备、域名排行与最近 DNS 查询记录，支持导出 CSV（UTF-8 BOM，Excel 可直接打开）。
+
+![流量统计](screenshots/05-stats.png)
+
+### 强制门户
+
+接管 UDP 53 后，未放行设备的域名解析统一指向热点网关；同时对 iOS / Android / Windows 的联网探测路径（`/generate_204`、`/hotspot-detect.html`、`/ncsi.txt` 等）返回 302 重定向，由系统自动弹出登录提示。内置极光、海风、商务、极简 4 套欢迎页模板，支持自定义文案、访问密码与放行时段；放行名单按 IP 与 MAC 持久化，也支持手动放行或撤销。门户默认随热点自动启停。
+
+![门户配置](screenshots/04-portal.png)
+
+访客连上热点后看到的 4 套欢迎页模板：
+
+![四套强制门户欢迎页模板](screenshots/09-portal-page.png)
+
+诊断面板展示网卡能力、后端选择与共享连接等环境信息：
+
+![诊断面板](screenshots/08-diagnostics.png)
+
+### 辅助工具
+
+二维码扫码连接（`WIFI:` 标准格式）、局域网文件共享（HTTP 8081，浏览器直接上传下载）、端口转发（基于 `netsh interface portproxy`）、下行速率测试（Cloudflare 端点）、临时密码（到期自动还原原密码）、定时关闭热点、配置导入导出。
+
+| 工具箱 | 扫码连接 |
+| --- | --- |
+| ![工具箱](screenshots/06-tools.png) | ![扫码连接](screenshots/07-qr.png) |
+
+### 界面与交互
+
+PyWebView + Edge WebView2 网页界面，支持深色 / 浅色主题与中英文双语；提供 160×64 悬浮窗（窗口置顶、可拖拽、位置记忆）、系统托盘最小化与全局热键 `Ctrl + Alt + H`。传统 Tkinter 界面保留作为兼容回退，可通过 `--tk` 启用。
+
+---
+
+## 快速开始
+
+### 环境要求
+
+| 项目 | 要求 |
+|------|------|
+| 操作系统 | Windows 10 1607 及以上 / Windows 11 |
+| Python | 3.10 及以上（推荐 3.12） |
+| 运行权限 | 建议以管理员身份运行（热点开关、DNS 劫持、防火墙规则均需该权限） |
+| 可选驱动 | Npcap，安装时勾选 WinPcap API 兼容模式，用于按设备的精确流量统计 |
+
+### 安装与启动
 
 ```bash
 cd windows-hotspot-butler
-npm install                 # Rosezm frontend (src/, TypeScript)
-pip install -r requirements.txt   # desktop shell (pywebview window + service)
+npm install                      # Rosezm 前端（src/，TypeScript）
+pip install -r requirements.txt   # 桌面壳（pywebview 窗口 + 后端服务）
 ```
 
-Then double-click `Run.bat` to start the desktop app (it detects the Python environment, checks that pywebview is installed and reports anything missing), or run `npm run dev` for the Rosezm web preview.
+随后双击 `Run.bat` 启动桌面应用（脚本会自动检测 Python 环境并检查 pywebview 是否已安装，缺失时给出提示），或执行 `npm run dev` 启动 Rosezm 网页预览。
 
-Recommended first-run sequence:
+首次使用建议按以下顺序操作：
 
-1. Enter an SSID and password on the settings page and click Save to write the local configuration.
-2. Click Apply now to push the parameters into the system hotspot.
-3. Click the central toggle to start the hotspot.
-4. Click the QR-code button beside the password field and scan it with a phone.
+1. 在设置页填写 SSID 与密码，点击「保存」写入本地配置；
+2. 点击「立即下发配置」将参数写入系统热点；
+3. 点击主界面中央开关启动热点；
+4. 点击密码右侧的二维码按钮，使用手机扫码连接。
 
-### Command-line options
+### 命令行参数
 
-| Option | Description |
-|--------|-------------|
-| *(none)* | Start the web UI (default) |
-| `--tk` | Start the legacy Tkinter UI |
-| `--selftest` | Run the self-check only; prints module and adapter capability information without opening a window |
-| `--no-elevate` | Skip the elevation prompt |
-| `--verbose` | Verbose logging |
-| `--debug` | Open the WebView developer tools |
+| 参数 | 说明 |
+|------|------|
+| （无参数） | 启动网页界面（默认） |
+| `--tk` | 启动传统 Tkinter 界面 |
+| `--selftest` | 仅执行自检，输出各模块与网卡能力信息，不打开窗口 |
+| `--no-elevate` | 跳过提权提示 |
+| `--verbose` | 输出详细日志 |
+| `--debug` | 开启 WebView 调试工具 |
 
-### Dependencies
+### 依赖说明
 
-| Package | Purpose | Required |
-|---------|---------|----------|
-| pywebview | Web UI host (Edge WebView2) | Yes |
-| pystray, Pillow | System tray icon | No — tray unavailable without them |
-| scapy, Npcap | Accurate per-device traffic statistics | No — falls back to adapter totals |
-| qrcode | WiFi QR code generation | No — QR feature unavailable without it |
+| 依赖 | 用途 | 是否必需 |
+|------|------|----------|
+| pywebview | 网页界面宿主（Edge WebView2） | 必需 |
+| pystray、Pillow | 系统托盘图标 | 可选，缺失时托盘功能不可用 |
+| scapy、Npcap | 按设备的精确流量统计 | 可选，缺失时回退为网卡总量统计 |
+| qrcode | 生成 WiFi 二维码 | 可选，缺失时扫码功能不可用 |
 
-All optional dependencies can be installed at once: `pip install pystray pillow qrcode`
-
----
-
-## Usage
-
-### Interface layout
-
-The main window has two panels. The left panel holds the hotspot toggle and status: online device count, live down/up rates, uptime and the rate curve of the last three minutes. The right panel is the device list, where each row shows the name, type icon, IP, current rate and lifetime usage.
-
-The buttons at the right of the title bar are, in order: theme toggle, traffic statistics, toolbox, captive portal, floating widget and settings.
-
-### Floating widget and tray
-
-The floating widget measures 160×64, stays on top, and shows the online device count together with live rates. It can be dragged anywhere; the position is saved on exit and restored on the next launch. With minimize-to-tray enabled, the close button minimizes the application to the system tray instead of exiting, and new devices raise a tray balloon. The global hotkey `Ctrl + Alt + H` toggles the hotspot regardless of which window has focus.
-
-### Ports and addresses
-
-| Service | Address |
-|---------|---------|
-| Captive portal | `http://192.168.137.1/` (listens on port 80) |
-| File sharing | `http://192.168.137.1:8081/` |
-| Port forwarding | Any TCP port, carried by `netsh interface portproxy` |
-
-`192.168.137.1` is the usual address; the actual value follows the IP assigned to the hotspot adapter.
+可选依赖可一次性安装：`pip install pystray pillow qrcode`
 
 ---
 
-## How it works
+## 使用说明
 
-### Backend selection
+### 界面构成
 
-Windows offers three unrelated ways to make a wireless adapter broadcast an SSID, and support varies considerably between cards:
+主界面分为左右两栏：左栏为热点开关与运行状态，包含在线设备数、实时上下行速率、运行时长与最近 3 分钟速率曲线；右栏为设备列表，每条记录显示名称、类型图标、IP、当前速率与累计用量。
 
-| Method | Backend | Notes |
-|--------|---------|-------|
-| Wi-Fi Direct | Mobile hotspot (WinRT) | What the Windows 10/11 mobile hotspot is actually built on; most USB adapters use this path |
-| Soft AP | Mobile hotspot (WinRT) | The older capability flag; reporting "not supported" here does not mean a hotspot is impossible |
-| Hosted network | Hosted network (netsh) | Same approach as Cheetah/360 WiFi |
+标题栏右侧依次为：主题切换、流量统计、工具箱、强制门户、悬浮窗、设置。
 
-At startup the application runs `netsh wlan show drivers` and `netsh wlan show wirelesscapabilities`, resolves those three capabilities, and picks a backend: WinRT first (5 GHz capable), falling back to netsh when unavailable. The netsh backend only creates the access point, so starting it also enables Internet Connection Sharing — without ICS, clients associate but have no route out.
+### 悬浮窗与托盘
 
-Every one of those findings (adapter model, radio types, band support, encryption support, active backend, the upstream connection being shared) is listed in the diagnostics panel and also printed by `python python-app/run.py --selftest`.
+悬浮窗尺寸为 160×64，窗口置顶显示在线设备数与实时速率，支持拖拽，退出时记录位置并在下次启动恢复。开启「关闭时最小化到托盘」后，点击关闭按钮不退出程序，而是最小化至系统托盘；有新设备接入时通过托盘气泡通知。全局热键 `Ctrl + Alt + H` 可在任意界面下切换热点状态。
 
-### Captive portal
+### 服务端口与地址
 
-The portal consists of two parts: a DNS proxy holding UDP 53 that answers A-record queries from unallowed devices with the hotspot gateway address while logging the requested domains, and an HTTP service on port 80 that serves the portal page and handles the `/accept` request. The DNS proxy that ships with ICS usually occupies UDP 53, so the application pauses SharedAccess, takes the port, then restores the service — Administrator rights are required for that step.
-
-### Threading model
-
-Everything slow (PowerShell invocations, ARP queries, system API calls) runs on background threads or a thread pool, while the `get_state()` exposed to the front end only reads an in-memory snapshot. Interface refresh therefore never blocks the background work. The front end polls every 1.2 seconds.
-
----
-
-## Configuration and data files
-
-All user data is stored under `%APPDATA%\WifiHotspotManager\`:
-
-| File | Contents |
+| 服务 | 访问地址 |
 |------|----------|
-| `config.json` | The complete application configuration |
-| `devices.json` | Device profiles: name, type, note, last IP, first/last seen |
-| `traffic.sqlite3` | Traffic database: lifetime totals, daily usage, sessions, DNS log |
-| `blocked.json` | MAC addresses denied internet access |
-| `portal_accepted.json` | Portal allow-list (IP, MAC, User-Agent, acceptance time) |
-| `portproxy.json` | Port forwarding rules |
-| `gateway.txt` | Cached gateway address, avoiding a PowerShell round trip each time |
-| `export-*.json`, `traffic-*.csv` | Manually exported configuration and traffic details |
-| `share/` | Shared files directory |
-| `logs/app.log` | Rolling log, 512 KB × 3 |
+| 强制门户 | `http://192.168.137.1/`（监听 80 端口） |
+| 文件共享 | `http://192.168.137.1:8081/` |
+| 端口转发 | 任意 TCP 端口，由 `netsh interface portproxy` 承载 |
 
-Every entry is plain text and can be deleted to return to defaults.
+上述地址以热点网卡实际分配的 IP 为准，通常为 `192.168.137.1`。
 
 ---
 
-## Troubleshooting
+## 工作原理
 
-**The hotspot toggle has no effect.**
-Almost always caused by running without Administrator rights; the badge at the left of the title bar reports the current privilege level. If it persists, open diagnostics for backend state and error details.
+### 热点后端选择
 
-**The application reports that the adapter cannot host a hotspot.**
-The diagnostics panel lists the probe result for Wi-Fi Direct, Soft AP and hosted network separately. When all three come back negative it is a hardware or driver limitation: use a wireless card that supports at least one of them, or install a solution that brings its own virtual AP driver.
+Windows 下发射 WiFi 信号有三条互不相同的路径，不同无线网卡的支持情况差异较大：
 
-**Devices associate but cannot reach the internet.**
-On the netsh backend this is normally ICS failing to start; restart the application as Administrator. Switching to the WinRT backend also resolves it when diagnostics shows WinRT as available.
+| 方式 | 对应后端 | 说明 |
+|------|----------|------|
+| Wi-Fi Direct | 移动热点 (WinRT) | Windows 10/11 系统移动热点的底层实现，多数 USB 网卡走此路径 |
+| 软 AP (Soft AP) | 移动热点 (WinRT) | 旧式能力标志，显示不支持并不代表无法发射热点 |
+| 承载网络 (hostednetwork) | 承载网络 (netsh) | 与猎豹 / 360 免费 WiFi 方案相同 |
 
-**The portal page does not appear automatically.**
-Automatic display depends on DNS hijacking, which requires taking UDP 53. If the port is held and cannot be taken, open `http://192.168.137.1/` on the device manually.
+程序启动时执行 `netsh wlan show drivers` 与 `netsh wlan show wirelesscapabilities`，解析上述三项能力后选择后端：默认优先 WinRT（支持 5 GHz），不可用时回退 netsh。netsh 后端仅负责建立 AP，因此在其启动后会额外启用 Internet 连接共享（ICS），否则设备虽能连上但无法访问外网。
 
-**Traffic is reported as adapter totals instead of per device.**
-Indicates that packet capture is not active. Install Npcap with the WinPcap-compatible option and run `pip install scapy`; the switch happens automatically on restart.
+以上判定结果（网卡型号、无线电类型、频段支持、加密能力、当前后端、被共享的上网连接）均可在「诊断」面板中查看，执行 `python python-app/run.py --selftest` 也可输出同样内容。
 
-**The tray icon or the QR code does not work.**
-They need pystray + Pillow and qrcode respectively. Run `pip install pystray pillow qrcode` to install them.
+### 强制门户
+
+门户由两部分组成：一是抢占 UDP 53 的 DNS 代理，将未放行设备的 A 记录查询应答为热点网关地址，同时记录域名日志；二是监听 80 端口的 HTTP 服务，负责返回门户页并处理 `/accept` 放行请求。ICS 自带的 DNS 代理通常占用 UDP 53，程序会尝试暂停 SharedAccess 服务完成抢占后恢复，该过程需要管理员权限。
+
+### 线程模型
+
+所有耗时操作（PowerShell 调用、ARP 查询、系统 API 调用）均在后台线程或线程池中执行，暴露给前端的 `get_state()` 仅读取内存快照，因此界面刷新不会阻塞后台任务。前端轮询间隔为 1.2 秒。
 
 ---
 
-## Development
+## 配置与数据文件
+
+用户数据统一保存在 `%APPDATA%\WifiHotspotManager\`：
+
+| 文件 | 内容 |
+|------|------|
+| `config.json` | 应用全部配置 |
+| `devices.json` | 设备档案：名称、类型、备注、历史 IP、首末次上线时间 |
+| `traffic.sqlite3` | 流量数据库，含累计用量、每日用量、会话与 DNS 查询记录 |
+| `blocked.json` | 被禁止上网的设备 MAC |
+| `portal_accepted.json` | 门户放行名单（IP、MAC、User-Agent、放行时间） |
+| `portproxy.json` | 端口转发规则 |
+| `gateway.txt` | 网关地址缓存，避免每次请求 PowerShell |
+| `export-*.json`、`traffic-*.csv` | 手动导出的配置文件与流量明细 |
+| `share/` | 文件共享目录 |
+| `logs/app.log` | 运行日志，512 KB × 3 滚动 |
+
+以上文件均为纯文本，可直接删除以恢复默认状态。
+
+---
+
+## 常见问题
+
+**热点开关无响应。**
+多数由未以管理员身份运行导致，标题栏左侧徽标会显示当前权限。若仍失败，可通过「诊断」查看后端状态与错误信息。
+
+**提示网卡不支持发射热点。**
+诊断面板会分别列出 Wi-Fi Direct、软 AP、承载网络三项能力的探测结论。三项均不可用时属于网卡硬件或驱动限制，需更换支持上述能力之一的无线网卡，或安装自带虚拟 AP 网卡驱动的方案。
+
+**设备可连接热点但无法访问外网。**
+使用 netsh 后端时通常由 ICS 未成功启用导致，建议以管理员身份重启程序；若诊断显示 WinRT 可用，也可切换至该后端。
+
+**门户页未自动弹出。**
+自动弹出依赖 DNS 劫持，需要抢占 UDP 53 端口。若该端口被占用且无法抢占，需手动访问 `http://192.168.137.1/` 打开门户页。
+
+**流量显示为网卡总量而非按设备区分。**
+表示未启用抓包数据源。需安装 Npcap（勾选 WinPcap API 兼容模式）并执行 `pip install scapy`，重启后自动切换。
+
+**托盘图标或二维码不可用。**
+分别需要 pystray + Pillow 与 qrcode，执行 `pip install pystray pillow qrcode` 安装即可。
+
+---
+
+## 开发说明
 
 ```
 windows-hotspot-butler/
-├── src/                     Rosezm frontend (TypeScript)
-│   ├── pages/               index.rose / mini.rose / api routes / 404 / 500
-│   └── server/              Server-side Windows core (hotspot, captive, ics, ...)
-├── public/                  1:1 original UI (index/mini/style/app.js) + enhance layer
-├── portal-templates/         Portal welcome page templates (4)
-├── python-app/              Desktop shell (single process)
-│   ├── run.py               Entry point: args / selftest / UI dispatch
-│   ├── server.py            HTTP service: /api/state, /api/op/<name>, static UI
-│   ├── desktop_webview.py   pywebview window, tray, hotkey, edge resize
-│   ├── windows_selftest.py  Read-only Windows self-test
-│   ├── build_exe.py         PyInstaller packaging (--windowed / --onefile)
-│   ├── health_check.py      One command, all automated gates
-│   ├── test_*.py mock_*.py  Regression suite
-│   └── hotspot/             Upstream business package (byte-identical, 1:1)
-│       ├── core/            Core logic, UI-independent
-│       │   ├── hotspot.py   Hotspot control: WinRT and netsh backends
-│       │   ├── wificaps.py  Adapter capability probing and backend recommendation
-│       │   ├── captive.py   Portal: DNS hijack + HTTP portal + allow-list
-│       │   ├── portal.py    Welcome page template rendering
-│       │   ├── traffic.py   Traffic engine (scapy / adapter / demo)
-│       │   ├── deviceman.py Device roster: identify, rename, type
-│       │   ├── storage.py   SQLite traffic DB and device profile I/O
-│       │   ├── netinfo.py   Adapter, ARP and ICS collection
-│       │   ├── ics.py       Internet Connection Sharing toggle
-│       │   ├── share.py     LAN file sharing service
-│       │   ├── portforward.py Port forwarding (netsh portproxy)
-│       │   ├── speedtest.py Cloudflare download speed test
-│       │   ├── oui.py       MAC vendor database and type inference
-│       │   ├── config.py    Config schema and persistence
-│       │   └── paths.py     Path constants and logging setup
-│       ├── webui/           Web UI backend (default)
-│       │   ├── app.py       Window, floating widget, tray, hotkey
-│       │   ├── backend.py   JS↔Python bridge; heavy work on a thread pool
-│       │   ├── tray.py      Tray icon
-│       │   ├── hotkey.py    Global hotkey registration and message loop
-│       │   ├── i18n.py      Chinese/English translation table
-│       │   └── ui/          Front-end HTML / CSS / JS and mini.html
-│       ├── templates/       Portal welcome page templates (4)
-│       └── scripts/         PowerShell scripts (tethering.ps1 / ics.ps1)
-├── package.json             Rosezm frontend scripts (build / dev / check)
-├── Run.bat                  One-click launcher with environment detection
-├── BuildExe.bat             Package the desktop app into an exe
-├── requirements.txt         Python dependencies of the desktop shell
-├── .github/workflows/       CI (every push) and tag-driven pre-release
+├── src/                     Rosezm 前端（TypeScript）
+│   ├── pages/               index.rose / mini.rose / api 路由 / 404 / 500
+│   └── server/              服务端 Windows 核心（hotspot、captive、ics 等）
+├── public/                  1:1 原版界面（index/mini/style/app.js）+ 增强层
+├── portal-templates/         强制门户欢迎页模板（4 个）
+├── python-app/              桌面壳（单进程）
+│   ├── run.py               入口：参数解析 / 自检 / 界面分发
+│   ├── server.py            HTTP 服务：/api/state、/api/op/<name>、静态资源
+│   ├── desktop_webview.py   pywebview 窗口、托盘、热键、边缘缩放
+│   ├── windows_selftest.py  只读 Windows 环境自检
+│   ├── build_exe.py         PyInstaller 打包（--windowed / --onefile）
+│   ├── health_check.py      一条命令跑完所有自动闸门
+│   ├── test_*.py mock_*.py  回归测试套件
+│   └── hotspot/             上游业务包（逐字节一致，1:1）
+│       ├── core/            核心逻辑，与界面无关
+│       │   ├── hotspot.py   热点控制：WinRT 与 netsh 双后端
+│       │   ├── wificaps.py  网卡能力探测与后端推荐
+│       │   ├── captive.py   强制门户：DNS 劫持 + HTTP 门户 + 放行名单
+│       │   ├── portal.py    欢迎页模板渲染
+│       │   ├── traffic.py   流量统计引擎（scapy / adapter / demo）
+│       │   ├── deviceman.py 设备台账：识别、改名、类型管理
+│       │   ├── storage.py   SQLite 流量库与设备档案读写
+│       │   ├── netinfo.py   网卡、ARP 与 ICS 采集
+│       │   ├── ics.py       Internet 连接共享开关
+│       │   ├── share.py     局域网文件共享服务
+│       │   ├── portforward.py 端口转发（netsh portproxy）
+│       │   ├── speedtest.py Cloudflare 下载测速
+│       │   ├── oui.py       MAC 厂商库与类型推断
+│       │   ├── config.py    配置结构与持久化
+│       │   └── paths.py     路径常量与日志初始化
+│       ├── webui/           Web 界面后端（默认）
+│       │   ├── app.py       窗口、悬浮浮窗、托盘、热键
+│       │   ├── backend.py   JS↔Python 桥；耗时操作走线程池
+│       │   ├── tray.py      托盘图标
+│       │   ├── hotkey.py    全局热键注册与消息循环
+│       │   ├── i18n.py      中英文翻译表
+│       │   └── ui/          前端 HTML / CSS / JS 与 mini.html
+│       ├── templates/       门户欢迎页模板（4 个）
+│       └── scripts/         PowerShell 脚本（tethering.ps1 / ics.ps1）
+├── package.json             Rosezm 前端脚本（build / dev / check）
+├── Run.bat                  一键启动脚本，自动检测运行环境
+├── BuildExe.bat             打包桌面应用 exe
+├── requirements.txt         桌面壳的 Python 依赖
+├── .github/workflows/       CI（每次 push）与 tag 触发的预发布
 └── LICENSE                  Apache 2.0
 ```
 
-Common customizations:
+常见定制方式：
 
-- **Add a portal template.** Drop an HTML file into `python-app/hotspot/templates/` and set `portal.template` in `config.json` to its name without the `.html` extension. The placeholders `{{ssid}}`, `{{title}}`, `{{notice_li}}`, `{{button}}` and `{{gateway}}` are available. Rendering uses plain string substitution, so CSS braces in the template are left untouched.
-- **Extend the vendor database.** Add lines to `%APPDATA%\WifiHotspotManager\oui_extra.csv` in the format `MACprefix,Vendor,devicetype`, for example `A4C138,Telink,iot`. Valid device types are listed in `DEVICE_TYPES` in `python-app/hotspot/core/oui.py`.
-- **Modify the interface.** The front end lives in `public/` (the Rosezm sources in `src/`); reload after editing, and use `--debug` to open the WebView developer tools. To expose a new call from Python, add a public method to `python-app/hotspot/webui/backend.py` — it is mounted automatically onto `window.pywebview.api`.
-- **Check an environment.** Run `python python-app/run.py --selftest` to exercise the core modules and adapter probing without opening a window.
+- **新增门户模板**：将 HTML 文件放入 `hotspot/templates/`，并在 `config.json` 中将 `portal.template` 设置为文件名（不含 `.html`）。模板支持 `{{ssid}}`、`{{title}}`、`{{notice_li}}`、`{{button}}`、`{{gateway}}` 等占位符，渲染采用字符串替换方式，与模板内的 CSS 花括号不冲突。
+- **扩展厂商库**：在 `%APPDATA%\WifiHotspotManager\oui_extra.csv` 中按 `MAC前缀,厂商名,设备类型` 逐行写入，例如 `A4C138,Telink,iot`。设备类型取值参见 `python-app/hotspot/core/oui.py` 中的 `DEVICE_TYPES`。
+- **修改界面**：前端文件位于 `public/`（Rosezm 源码在 `src/`），修改后刷新即可生效，配合 `--debug` 可打开 WebView 开发者工具。需要向前端暴露新接口时，在 `python-app/hotspot/webui/backend.py` 中新增公共方法即可自动挂载到 `window.pywebview.api`。
+- **环境自检**：执行 `python python-app/run.py --selftest`，可在不打开界面的情况下验证各核心模块与网卡能力。
 
 ---
 
-## License
+## 许可证
 
-Released under the [Apache License 2.0](LICENSE).
+Windows热点管理器基于 [Apache License 2.0](LICENSE) 开源。
