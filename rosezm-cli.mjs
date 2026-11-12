@@ -1,7 +1,8 @@
-// Rosezm CLI shim: resolves the framework's self-contained dist-cli bundle
-// next to this project (the framework checkout this port is built against),
-// so the project needs no npm install of the framework itself. esbuild resolves
-// from the framework's own node_modules.
+// Rosezm CLI shim.
+//   开源用户：npm install 之后走 node_modules/rosezm/dist-cli/rosezm.mjs
+//   本地开发：设 ROSEZM_FRAMEWORK 指向自己的框架 checkout（dist-cli 那一层），
+//             或直接设 ROSEZM_CLI 指向某个 rosezm.mjs
+// 优先用本地框架（开发迭代），没有才回落到 npm 包。
 //
 // 兼容原版 main.py 的命令行：
 //   (none)          → rosezm build + serve（默认网页界面）
@@ -17,13 +18,18 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// ROSEZM_CLI 可显式指向框架 dist-cli/rosezm.mjs（换机器/换盘符时不用改代码）。
-const override = process.env.ROSEZM_CLI;
-const candidates = override ? [resolve(override)] : [
-  resolve(here, '../../work/Rosezm/Rosezm/dist-cli/rosezm.mjs'),
-  resolve(here, '../Rosezm/Rosezm/dist-cli/rosezm.mjs'),
-  resolve(here, 'vendor/rosezm/dist-cli/rosezm.mjs'),
-];
+// 1) 显式单点覆盖
+const explicit = process.env.ROSEZM_CLI ? [resolve(process.env.ROSEZM_CLI)] : [];
+// 2) 自己的框架 checkout（本地开发；ROSEZM_FRAMEWORK 指向 checkout 根目录）
+const local = process.env.ROSEZM_FRAMEWORK
+  ? [resolve(process.env.ROSEZM_FRAMEWORK, 'dist-cli/rosezm.mjs')]
+  : [
+      resolve(here, '../../work/Rosezm/Rosezm/dist-cli/rosezm.mjs'),
+      resolve(here, '../Rosezm/Rosezm/dist-cli/rosezm.mjs'),
+    ];
+// 3) 开源用户的 npm 包
+const npmCli = resolve(here, 'node_modules/rosezm/dist-cli/rosezm.mjs');
+const candidates = [...explicit, ...local, npmCli];
 const cli = candidates.find((p) => existsSync(p));
 if (!cli) {
   // 桌面 exe 从源码 public/ 直接携带界面，Web 预览版 dist/ 是可选产物。
@@ -33,7 +39,7 @@ if (!cli) {
     process.exit(0);
   }
   console.error('rosezm CLI not found. Looked in:\n  ' + candidates.join('\n  '));
-  console.error('Set ROSEZM_CLI=<path to dist-cli/rosezm.mjs> to override.');
+  console.error('Run `npm install` (rosezm@0.2.2), or set ROSEZM_FRAMEWORK / ROSEZM_CLI.');
   process.exit(1);
 }
 

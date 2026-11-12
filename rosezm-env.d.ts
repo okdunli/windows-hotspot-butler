@@ -1,1 +1,1 @@
-/// <reference path="./vendor/rosezm-types/rosezm.d.ts" />
+/// <reference types="rosezm" />

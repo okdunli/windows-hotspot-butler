@@ -1,12 +1,11 @@
 name: CI
 
 # Every push runs the gates a clean checkout can run:
-#   npm install -> typecheck -> the Python regression suite (health_check.py)
+#   npm install -> typecheck -> the Rosezm frontend build (rosezm@0.2.2 from
+#   npm) -> the Python regression suite (health_check.py).
 #
-# The frontend bundle (npm run build) needs the Rosezm framework checkout
-# (dist-cli/rosezm.mjs) which is not vendored in this repository, so it is
-# intentionally not part of CI. The desktop UI itself ships as source
-# (public/) and is verified byte-for-byte by the parity gates instead.
+# Local developers can point ROSEZM_FRAMEWORK at their own checkout; CI and
+# open-source users use the npm package.
 on:
   push:
   pull_request:
@@ -35,6 +34,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Build the Rosezm frontend
+        run: npm run build
 
       - uses: actions/setup-python@v5
         with:

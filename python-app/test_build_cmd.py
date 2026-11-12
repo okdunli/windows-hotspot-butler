@@ -74,19 +74,25 @@ def main() -> int:
     assert _has_pair(c, "--name", "Foo") and _has_pair(c, "--icon", "x.ico")
     print("  [PASS] --name / --icon 透传")
 
-    # 7) 打包不依赖 Web 预览版 dist/：缺框架 checkout 的 Windows 机器上
-    #    BuildExe.bat 会跳过前端构建，build_exe 必须仍能带齐桌面界面。
+    # 7) 框架走 npm 包（rosezm@0.2.2），本地开发可 ROSEZM_FRAMEWORK 覆盖；
+    #    打包不依赖 Web 预览版 dist/：BuildExe.bat 跳过前端也不阻断 exe。
     bat = (HERE.parent / "BuildExe.bat").read_text(encoding="utf-8")
     shim = (HERE.parent / "rosezm-cli.mjs").read_text(encoding="utf-8")
+    pkg = (HERE.parent / "package.json").read_text(encoding="utf-8")
+    assert '"rosezm": "0.2.2"' in pkg, "框架应从 npm 安装 rosezm@0.2.2"
+    assert "node_modules/rosezm/dist-cli/rosezm.mjs" in shim, "应回落到 npm 包的 CLI"
+    assert "ROSEZM_FRAMEWORK" in shim, "本地开发应可指向自己的框架 checkout"
+    assert "vendor/rosezm" not in shim, "不得再引用已删除的 vendor 框架副本"
+    assert not (HERE.parent / "vendor").is_dir(), "vendor/ 应已删除"
     assert "WHM_OPTIONAL_BUILD" in bat and "WHM_OPTIONAL_BUILD" in shim
     assert "node rosezm-cli.mjs build . || goto :failed" not in bat, "前端构建不得阻断 exe 打包"
-    assert "ROSEZM_CLI" in shim, "应支持显式指定框架路径"
+    assert "ROSEZM_CLI" in shim, "应支持显式指定单点 CLI 路径"
     be = (HERE / "build_exe.py").read_text(encoding="utf-8")
     assert 'if dist_dir.is_dir() and (dist_dir / "index.html").is_file():' in be, \
         "dist/ 必须是可选携带（没有就不带）"
     add_no_dist = [a for a in _add_data(B.build_cmd(pathsep=";")) if a.endswith(";dist")]
     assert len(add_no_dist) <= 1, f"dist 最多带一份：{add_no_dist}"
-    print("  [PASS] 无框架 checkout / 无 dist 也能编译（界面来自 public/）")
+    print("  [PASS] npm rosezm@0.2.2 / 可选 dist / exe 打包不阻断")
 
     # 8) 版本号一致性：界面徽标 / 服务层 / package.json / exe 属性四处必须同号
     import json as _json

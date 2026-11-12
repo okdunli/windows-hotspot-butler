@@ -1,15 +1,13 @@
 /**
  * Cross-platform bootstrap for the Rosezm CLI's native esbuild dependency.
  *
- * The framework checkout's node_modules/esbuild may contain a binary for a
- * different OS (e.g. a macOS checkout copied to Windows: @esbuild/darwin-arm64
- * present but @esbuild/win32-x64 needed). The framework CLI statically imports
- * "esbuild" from its own tree, so the fix must happen THERE, not in this
- * project. We reinstall esbuild inside the framework tree for the current
- * platform (npm writes the matching @esbuild/<platform> package), leaving the
- * framework's source and dist-cli untouched.
+ * 开源用户走 npm 包（rosezm@0.2.2）：esbuild 由 npm 按当前平台安装好，
+ * 这里不需要做任何事 —— 直接跳过。
  *
- * No-op on the machine that built the framework (already matches).
+ * 本地开发者用 ROSEZM_FRAMEWORK 指向自己的框架 checkout 时，checkout 里的
+ * node_modules/esbuild 可能是别的平台的二进制（macOS checkout 拷到 Windows
+ * 之类）。CLI 从框架自己的目录静态 import "esbuild"，所以修复必须发生在
+ * 框架树里：按当前平台重装 esbuild，不动框架的源码与 dist-cli。
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -19,16 +17,17 @@ import { spawnSync } from 'node:child_process';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const frameworkCandidates = [
+  process.env.ROSEZM_FRAMEWORK,
   resolve(root, '../../work/Rosezm/Rosezm'),
   resolve(root, '../Rosezm/Rosezm'),
-  resolve(root, 'vendor/rosezm'),
-];
-const framework = frameworkCandidates.find((p) => existsSync(join(p, 'dist-cli', 'rosezm.mjs')));
+].filter(Boolean);
+const framework = frameworkCandidates.find(
+  (p) => existsSync(join(p, 'dist-cli', 'rosezm.mjs')));
 
 if (!framework) {
-  console.error('[ensure-esbuild] Rosezm framework not found; looked in:');
-  for (const p of frameworkCandidates) console.error('  ' + p);
-  process.exit(1);
+  // 没有本地 checkout = 用的是 npm 包，esbuild 已由 npm 按平台装好。
+  console.log('[ensure-esbuild] using the npm rosezm package; nothing to do.');
+  process.exit(0);
 }
 
 const pkgDir = join(framework, 'node_modules', 'esbuild');

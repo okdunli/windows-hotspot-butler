@@ -10,7 +10,6 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  // Node 类型来自 @types/node（devDependency）；vendor/types-node 保留为
-  // 离线环境的后备副本，不参与本配置的类型解析。
+  // Node 类型来自 @types/node，框架类型来自 rosezm（均走 npm）。
   "include": ["rosezm-env.d.ts", "src/**/*.ts"]
 }
